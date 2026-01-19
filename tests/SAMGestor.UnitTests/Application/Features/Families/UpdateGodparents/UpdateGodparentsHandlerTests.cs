@@ -21,9 +21,9 @@ public class UpdateGodparentsHandlerTests
             10, 10,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5)),
-            new Money(0,"BRL"), new Money(0,"BRL"),
+            new Money(0, "BRL"), new Money(0, "BRL"),
             new Percentage(50), new Percentage(50));
-        
+
         if (locked) r.LockFamilies();
         return r;
     }
@@ -67,7 +67,7 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(Guid.NewGuid(), Guid.NewGuid(), null, null);
+        var cmd = new UpdateGodparentsCommand(Guid.NewGuid(), Guid.NewGuid(), null!, null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<NotFoundException>()
@@ -78,7 +78,7 @@ public class UpdateGodparentsHandlerTests
     public async Task Falha_quando_lock_global()
     {
         var retreat = NewRetreat(locked: true);
-        
+
         var retRepo = new Mock<IRetreatRepository>();
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
@@ -90,7 +90,7 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, Guid.NewGuid(), null, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, Guid.NewGuid(), null!, null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -101,7 +101,7 @@ public class UpdateGodparentsHandlerTests
     public async Task Falha_quando_familia_nao_existe()
     {
         var retreat = NewRetreat();
-        
+
         var retRepo = new Mock<IRetreatRepository>();
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
@@ -117,7 +117,7 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, Guid.NewGuid(), null, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, Guid.NewGuid(), null!, null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<NotFoundException>()
@@ -146,7 +146,7 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null!, null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -174,7 +174,7 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null!, null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -206,7 +206,7 @@ public class UpdateGodparentsHandlerTests
             retreat.Id,
             fam.Id,
             PadrinhoIds: new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() }, // 3 padrinhos
-            MadrinhaIds: null);
+            MadrinhaIds: null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -237,7 +237,7 @@ public class UpdateGodparentsHandlerTests
         var cmd = new UpdateGodparentsCommand(
             retreat.Id,
             fam.Id,
-            PadrinhoIds: null,
+            PadrinhoIds: null!,
             MadrinhaIds: new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() }); // 3 madrinhas
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
@@ -280,7 +280,7 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { outsider }, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { outsider }, null!);
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -359,7 +359,7 @@ public class UpdateGodparentsHandlerTests
 
         var handler = new UpdateGodparentsHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { r2.Id }, null); // r2 é mulher!
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { r2.Id }, null!); // r2 é mulher!
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -400,7 +400,7 @@ public class UpdateGodparentsHandlerTests
 
         var handler = new UpdateGodparentsHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, new Mock<IUnitOfWork>().Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null, new List<Guid> { r1.Id }); // r1 é homem!
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null!, new List<Guid> { r1.Id }); // r1 é homem!
 
         await FluentActions.Invoking(() => handler.Handle(cmd, default))
             .Should().ThrowAsync<BusinessRuleException>()
@@ -455,13 +455,13 @@ public class UpdateGodparentsHandlerTests
 
         var versionBefore = retreat.FamiliesVersion;
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { r1.Id, r2.Id }, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { r1.Id, r2.Id }, null!);
         var res = await handler.Handle(cmd, default);
 
         res.Success.Should().BeTrue();
         res.Version.Should().Be(versionBefore + 1);
-        res.Warnings.Should().Contain(w => w.Contains("madrinha")); // Warning sobre falta de madrinhas
-        
+        res.Warnings.Should().Contain(w => w.Contains("madrinha"));
+
         fm1.IsPadrinho.Should().BeTrue();
         fm2.IsPadrinho.Should().BeTrue();
         fm3.IsPadrinho.Should().BeFalse();
@@ -515,12 +515,12 @@ public class UpdateGodparentsHandlerTests
 
         var handler = new UpdateGodparentsHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null, new List<Guid> { r3.Id, r4.Id });
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null!, new List<Guid> { r3.Id, r4.Id });
         var res = await handler.Handle(cmd, default);
 
         res.Success.Should().BeTrue();
-        res.Warnings.Should().Contain(w => w.Contains("padrinho")); // Warning sobre falta de padrinhos
-        
+        res.Warnings.Should().Contain(w => w.Contains("padrinho"));
+
         fm3.IsMadrinha.Should().BeTrue();
         fm4.IsMadrinha.Should().BeTrue();
 
@@ -580,8 +580,8 @@ public class UpdateGodparentsHandlerTests
 
         res.Success.Should().BeTrue();
         res.Version.Should().Be(versionBefore + 1);
-        res.Warnings.Should().BeEmpty(); // Sem warnings pois tem 2 de cada
-        
+        res.Warnings.Should().BeEmpty(); 
+
         fm1.IsPadrinho.Should().BeTrue();
         fm2.IsPadrinho.Should().BeTrue();
         fm3.IsMadrinha.Should().BeTrue();
@@ -601,8 +601,7 @@ public class UpdateGodparentsHandlerTests
 
         var fm1 = Link(retreat.Id, fam.Id, r1.Id, 0);
         var fm2 = Link(retreat.Id, fam.Id, r2.Id, 1);
-        
-        // Marcar ambos como padrinhos inicialmente
+
         fm1.MarkAsPadrinho();
         fm2.MarkAsPadrinho();
 
@@ -629,13 +628,12 @@ public class UpdateGodparentsHandlerTests
            .Returns(Task.CompletedTask);
 
         var handler = new UpdateGodparentsHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
-
-        // Atualizar para ter apenas r1 como padrinho
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { r1.Id }, null);
+        
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, new List<Guid> { r1.Id }, null!);
         await handler.Handle(cmd, default);
 
         fm1.IsPadrinho.Should().BeTrue();
-        fm2.IsPadrinho.Should().BeFalse(); // Deve ser desmarcado!
+        fm2.IsPadrinho.Should().BeFalse(); 
     }
 
     [Fact]
@@ -672,12 +670,12 @@ public class UpdateGodparentsHandlerTests
             new Mock<IRegistrationRepository>().Object,
             uow.Object);
 
-        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null, null);
+        var cmd = new UpdateGodparentsCommand(retreat.Id, fam.Id, null!, null!);
         var res = await handler.Handle(cmd, default);
 
         res.Success.Should().BeTrue();
         res.Warnings.Should().Contain(w => w.Contains("não possui padrinhos nem madrinhas"));
-        
+
         uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -720,8 +718,6 @@ public class UpdateGodparentsHandlerTests
            .Returns(Task.CompletedTask);
 
         var handler = new UpdateGodparentsHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
-
-        // Passar IDs duplicados
         var cmd = new UpdateGodparentsCommand(
             retreat.Id,
             fam.Id,
@@ -731,8 +727,7 @@ public class UpdateGodparentsHandlerTests
         var res = await handler.Handle(cmd, default);
 
         res.Success.Should().BeTrue();
-        
-        // Deve ter tratado como 1 padrinho e 1 madrinha apenas
+
         fm1.IsPadrinho.Should().BeTrue();
         fm2.IsMadrinha.Should().BeTrue();
     }

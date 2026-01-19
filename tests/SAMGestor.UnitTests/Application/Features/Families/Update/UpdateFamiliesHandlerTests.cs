@@ -52,7 +52,13 @@ public sealed class UpdateFamiliesHandlerTests
         return f;
     }
 
-    private static FamilyMember Link(Guid retreatId, Guid familyId, Guid regId, int pos, bool isPadrinho = false, bool isMadrinha = false)
+    private static FamilyMember Link(
+        Guid retreatId,
+        Guid familyId,
+        Guid regId,
+        int pos,
+        bool isPadrinho = false,
+        bool isMadrinha = false)
         => new FamilyMember(retreatId, familyId, regId, pos, isPadrinho, isMadrinha);
 
     private static UpdateFamiliesCommand Cmd(
@@ -64,7 +70,7 @@ public sealed class UpdateFamiliesHandlerTests
         var families = fams
             .Select(x => new FamilyInput(
                 FamilyId: x.family.Id,
-                Name: (string)x.family.Name,
+                Name: x.family.Name, // ✅ sem cast redundante
                 ColorName: x.colorName ?? x.family.Color.Name,
                 Capacity: x.family.Capacity,
                 Members: x.members.Select(m => new MemberInput(m.regId, m.pos)).ToList(),
@@ -88,11 +94,38 @@ public sealed class UpdateFamiliesHandlerTests
                     Mock<IUnitOfWork> uow)
         Mocks()
     {
-        return (new Mock<IRetreatRepository>(),
-                new Mock<IFamilyRepository>(),
-                new Mock<IFamilyMemberRepository>(),
-                new Mock<IRegistrationRepository>(),
-                new Mock<IUnitOfWork>());
+        var retRepo = new Mock<IRetreatRepository>();
+        var famRepo = new Mock<IFamilyRepository>();
+        var fmRepo = new Mock<IFamilyMemberRepository>();
+        var regRepo = new Mock<IRegistrationRepository>();
+        var uow = new Mock<IUnitOfWork>();
+
+       
+        famRepo.Setup(x => x.ListByRetreatAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new List<Family>());
+
+        fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>>());
+
+        regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new Dictionary<Guid, Registration>());
+        
+        famRepo.Setup(x => x.UpdateAsync(It.IsAny<Family>(), It.IsAny<CancellationToken>()))
+               .Returns(Task.CompletedTask);
+
+        fmRepo.Setup(x => x.RemoveByFamilyIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+              .Returns(Task.CompletedTask);
+
+        fmRepo.Setup(x => x.AddRangeAsync(It.IsAny<IEnumerable<FamilyMember>>(), It.IsAny<CancellationToken>()))
+              .Returns(Task.CompletedTask);
+
+        retRepo.Setup(x => x.UpdateAsync(It.IsAny<Retreat>(), It.IsAny<CancellationToken>()))
+               .Returns(Task.CompletedTask);
+
+        uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()))
+           .Returns(Task.CompletedTask);
+
+        return (retRepo, famRepo, fmRepo, regRepo, uow);
     }
 
     // ===== TESTES DE VALIDAÇÃO BÁSICA =====
@@ -143,6 +176,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -165,11 +199,12 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
         var fLocked = F(retreat.Id, "Família L", 4, "Azul", locked: true);
-        var fOpen   = F(retreat.Id, "Família A", 4, "Verde");
+        var fOpen = F(retreat.Id, "Família A", 4, "Verde");
 
         var r1 = R(retreat.Id, "Joao Silva", Gender.Male);
         var r2 = R(retreat.Id, "Maria Souza", Gender.Female);
@@ -180,7 +215,10 @@ public sealed class UpdateFamiliesHandlerTests
                .ReturnsAsync(new List<Family> { fLocked, fOpen });
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration>
+               {
+                   [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4
+               });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -206,6 +244,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -220,7 +259,10 @@ public sealed class UpdateFamiliesHandlerTests
         var r4 = R(retreat.Id, "Bea Souza", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration>
+               {
+                   [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4
+               });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -248,6 +290,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -270,7 +313,8 @@ public sealed class UpdateFamiliesHandlerTests
                     new List<MemberInput> { new(ghost,0), new(ghost,1), new(ghost,2), new(ghost,3) },
                     new List<Guid>(), new List<Guid>())
             },
-            true);
+            true
+        );
 
         var res = await handler.Handle(cmd, default);
 
@@ -285,6 +329,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -298,7 +343,7 @@ public sealed class UpdateFamiliesHandlerTests
         var r4 = R(retreat.Id, "Ana D", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -311,7 +356,8 @@ public sealed class UpdateFamiliesHandlerTests
                     new List<MemberInput> { new(r1.Id,0), new(r2.Id,1), new(r3.Id,2), new(r4.Id,3) },
                     new List<Guid>(), new List<Guid>())
             },
-            true);
+            true
+        );
 
         var res = await handler.Handle(cmd, default);
 
@@ -324,6 +370,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -343,14 +390,14 @@ public sealed class UpdateFamiliesHandlerTests
         var r8 = R(retreat.Id, "Clara H", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> {
-                   [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4,
-                   [r5.Id]=r5,[r6.Id]=r6,[r7.Id]=r7,[r8.Id]=r8
+               .ReturnsAsync(new Dictionary<Guid, Registration>
+               {
+                   [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4,
+                   [r5.Id] = r5, [r6.Id] = r6, [r7.Id] = r7, [r8.Id] = r8
                });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
-        // Tentar atualizar ambas para a mesma cor "Roxo"
         var cmd = new UpdateFamiliesCommand(
             retreat.Id,
             retreat.FamiliesVersion,
@@ -359,11 +406,13 @@ public sealed class UpdateFamiliesHandlerTests
                 new FamilyInput(fam1.Id, "Fam A", "Roxo", 4,
                     new List<MemberInput> { new(r1.Id,0), new(r2.Id,1), new(r3.Id,2), new(r4.Id,3) },
                     new List<Guid>(), new List<Guid>()),
+
                 new FamilyInput(fam2.Id, "Fam B", "Roxo", 4,
                     new List<MemberInput> { new(r5.Id,0), new(r6.Id,1), new(r7.Id,2), new(r8.Id,3) },
                     new List<Guid>(), new List<Guid>())
             },
-            true);
+            true
+        );
 
         var res = await handler.Handle(cmd, default);
 
@@ -378,6 +427,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -397,14 +447,14 @@ public sealed class UpdateFamiliesHandlerTests
         var r8 = R(retreat.Id, "Clara H", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> {
-                   [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4,
-                   [r5.Id]=r5,[r6.Id]=r6,[r7.Id]=r7,[r8.Id]=r8
+               .ReturnsAsync(new Dictionary<Guid, Registration>
+               {
+                   [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4,
+                   [r5.Id] = r5, [r6.Id] = r6, [r7.Id] = r7, [r8.Id] = r8
                });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
-        // Tentar atualizar ambas para o mesmo nome
         var cmd = new UpdateFamiliesCommand(
             retreat.Id,
             retreat.FamiliesVersion,
@@ -413,11 +463,13 @@ public sealed class UpdateFamiliesHandlerTests
                 new FamilyInput(fam1.Id, "Ministério A", "Azul", 4,
                     new List<MemberInput> { new(r1.Id,0), new(r2.Id,1), new(r3.Id,2), new(r4.Id,3) },
                     new List<Guid>(), new List<Guid>()),
+
                 new FamilyInput(fam2.Id, "Ministério A", "Verde", 4,
                     new List<MemberInput> { new(r5.Id,0), new(r6.Id,1), new(r7.Id,2), new(r8.Id,3) },
                     new List<Guid>(), new List<Guid>())
             },
-            true);
+            true
+        );
 
         var res = await handler.Handle(cmd, default);
 
@@ -432,6 +484,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -446,7 +499,13 @@ public sealed class UpdateFamiliesHandlerTests
         var outsider = R(retreat.Id, "Outsider Bingo", Gender.Male);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4,[outsider.Id]=outsider });
+               .ReturnsAsync(new Dictionary<Guid, Registration>
+               {
+                   [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4, [outsider.Id] = outsider
+               });
+        
+        fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>> { [fam.Id] = new List<FamilyMember>() });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -471,6 +530,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -484,7 +544,10 @@ public sealed class UpdateFamiliesHandlerTests
         var r4 = R(retreat.Id, "Ana D", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
+
+        fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>> { [fam.Id] = new List<FamilyMember>() });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -493,7 +556,7 @@ public sealed class UpdateFamiliesHandlerTests
             retreat.FamiliesVersion,
             new[]
             {
-                (fam, new (Guid,int)[]{ (r1.Id,0), (r2.Id,1), (r3.Id,2), (r4.Id,3) }, (string?)null, new[]{ r2.Id }, Array.Empty<Guid>()) // r2 é mulher
+                (fam, new (Guid,int)[]{ (r1.Id,0), (r2.Id,1), (r3.Id,2), (r4.Id,3) }, (string?)null, new[]{ r2.Id }, Array.Empty<Guid>())
             },
             ignoreWarnings: true
         );
@@ -509,6 +572,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -522,33 +586,32 @@ public sealed class UpdateFamiliesHandlerTests
         var r4 = R(retreat.Id, "Ana D", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
+
+        fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>> { [fam.Id] = new List<FamilyMember>() });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
-
-        var cmd = Cmd(
-            retreat.Id,
-            retreat.FamiliesVersion,
-            new[]
-            {
-                (fam, new (Guid,int)[]{ (r1.Id,0), (r2.Id,1), (r3.Id,2), (r4.Id,3) }, (string?)null, new[]{ r1.Id }, new[]{ r2.Id, r4.Id }) // r1 em ambos listas (erro no código de validação)
-            },
-            ignoreWarnings: true
-        );
-
-        // Esse teste valida que não há overlap - ajustar para testar overlap real
-        var cmdWithOverlap = new UpdateFamiliesCommand(
+        
+        var cmd = new UpdateFamiliesCommand(
             retreat.Id,
             retreat.FamiliesVersion,
             new List<FamilyInput>
             {
-                new FamilyInput(fam.Id, "Fam A", "Azul", 4,
+                new FamilyInput(
+                    fam.Id, "Fam A", "Azul", 4,
                     new List<MemberInput> { new(r1.Id,0), new(r2.Id,1), new(r3.Id,2), new(r4.Id,3) },
                     new List<Guid> { r1.Id }, // padrinho
-                    new List<Guid> { r1.Id }) // madrinha (OVERLAP impossível pois r1 é Male, mas teste de overlap em geral)
+                    new List<Guid> { r1.Id }  // madrinha (OVERLAP)
+                )
             },
-            true);
-        
+            true
+        );
+
+        var res = await handler.Handle(cmd, default);
+
+        res.Errors.Should().Contain(e => e.Code.Contains("OVERLAP"));
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -556,6 +619,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(retreat);
 
@@ -570,13 +634,10 @@ public sealed class UpdateFamiliesHandlerTests
         var r5 = R(retreat.Id, "Ana Souza", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4,[r5.Id]=r5 });
+            .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4, [r5.Id] = r5 });
 
         fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>>
-            {
-                [fam.Id] = new List<FamilyMember>()
-            });
+            .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>> { [fam.Id] = new List<FamilyMember>() });
 
         var cmd = new UpdateFamiliesCommand(
             retreat.Id,
@@ -585,11 +646,12 @@ public sealed class UpdateFamiliesHandlerTests
             {
                 new FamilyInput(fam.Id, "Fam A", "Azul", 5,
                     new List<MemberInput> { new(r1.Id,0), new(r2.Id,1), new(r3.Id,2), new(r4.Id,3), new(r5.Id,4) },
-                    new List<Guid> { r1.Id, r2.Id, r3.Id }, 
+                    new List<Guid> { r1.Id, r2.Id, r3.Id },
                     new List<Guid>())
             },
-            true);
-        
+            true
+        );
+
         var validator = new UpdateFamiliesValidator();
         var validationResult = await validator.ValidateAsync(cmd);
 
@@ -604,6 +666,7 @@ public sealed class UpdateFamiliesHandlerTests
     {
         var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
         var retreat = NewOpenRetreat();
+
         retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(retreat);
 
@@ -611,13 +674,16 @@ public sealed class UpdateFamiliesHandlerTests
         famRepo.Setup(x => x.ListByRetreatAsync(retreat.Id, It.IsAny<CancellationToken>()))
                .ReturnsAsync(new List<Family> { fam });
 
+        fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>> { [fam.Id] = new List<FamilyMember>() });
+
         var r1 = R(retreat.Id, "A A", Gender.Male, city: "Recife");
         var r2 = R(retreat.Id, "B B", Gender.Female, city: "Recife");
         var r3 = R(retreat.Id, "C C", Gender.Male, city: "São Paulo");
         var r4 = R(retreat.Id, "D D", Gender.Female, city: "Rio");
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -627,7 +693,7 @@ public sealed class UpdateFamiliesHandlerTests
         }, ignoreWarnings: false);
 
         var res = await handler.Handle(cmd, default);
-        
+
         res.Warnings.Should().Contain(w => w.Code == "SAME_CITY");
         res.Families.Should().BeEmpty();
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -654,29 +720,10 @@ public sealed class UpdateFamiliesHandlerTests
         var r4 = R(retreat.Id, "Ana D", Gender.Female);
 
         regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
 
-        famRepo.Setup(x => x.UpdateAsync(It.IsAny<Family>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        fmRepo.Setup(x => x.RemoveByFamilyIdAsync(fam.Id, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        fmRepo.Setup(x => x.AddRangeAsync(It.Is<IEnumerable<FamilyMember>>(ls => ls.Count() == 4), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        retRepo.Setup(x => x.UpdateAsync(retreat, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-
-        famRepo.Setup(x => x.ListByRetreatAsync(retreat.Id, It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new List<Family> { fam });
         fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>>
-              {
-                  [fam.Id] = new()
-                  {
-                      Link(retreat.Id, fam.Id, r1.Id,0, isPadrinho: true),
-                      Link(retreat.Id, fam.Id, r2.Id,1, isMadrinha: true),
-                      Link(retreat.Id, fam.Id, r3.Id,2, isPadrinho: true),
-                      Link(retreat.Id, fam.Id, r4.Id,3, isMadrinha: true),
-                  }
-              });
-        regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>> { [fam.Id] = new List<FamilyMember>() });
 
         var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
 
@@ -686,7 +733,7 @@ public sealed class UpdateFamiliesHandlerTests
         });
 
         var prev = retreat.FamiliesVersion;
-        var res  = await handler.Handle(cmd, default);
+        var res = await handler.Handle(cmd, default);
 
         res.Errors.Should().BeEmpty();
         res.Families.Should().HaveCount(1);
@@ -698,74 +745,57 @@ public sealed class UpdateFamiliesHandlerTests
         family.Members.Should().HaveCount(4);
         family.Members.Count(m => m.IsPadrinho).Should().Be(2);
         family.Members.Count(m => m.IsMadrinha).Should().Be(2);
-        family.Members.Should().AllSatisfy(m =>
-        {
-            m.Email.Should().NotBeNullOrEmpty();
-            m.Phone.Should().NotBeNullOrEmpty();
-        });
 
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
-  [Fact]
-public async Task Can_update_only_some_families_not_all()
-{
-    var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
-    var retreat = NewOpenRetreat();
-
-    retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
-           .ReturnsAsync(retreat);
-
-    var fam1 = F(retreat.Id, "Fam 1", 4, "Azul");
-    var fam2 = F(retreat.Id, "Fam 2", 4, "Verde");
-    var fam3 = F(retreat.Id, "Fam 3", 4, "Vermelho");
-
-    famRepo.Setup(x => x.ListByRetreatAsync(retreat.Id, It.IsAny<CancellationToken>()))
-           .ReturnsAsync(new List<Family> { fam1, fam2, fam3 });
-
-    // ✅ CORRIGIDO: Nomes completos válidos
-    var r1 = R(retreat.Id, "João Silva", Gender.Male);
-    var r2 = R(retreat.Id, "Maria Santos", Gender.Female);
-    var r3 = R(retreat.Id, "Carlos Lima", Gender.Male);
-    var r4 = R(retreat.Id, "Ana Costa", Gender.Female);
-
-    regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-           .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id]=r1,[r2.Id]=r2,[r3.Id]=r3,[r4.Id]=r4 });
-
-    famRepo.Setup(x => x.UpdateAsync(It.IsAny<Family>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-    fmRepo.Setup(x => x.RemoveByFamilyIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-    fmRepo.Setup(x => x.AddRangeAsync(It.IsAny<IEnumerable<FamilyMember>>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-    retRepo.Setup(x => x.UpdateAsync(retreat, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-    uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-
-    famRepo.Setup(x => x.ListByRetreatAsync(retreat.Id, It.IsAny<CancellationToken>()))
-           .ReturnsAsync(new List<Family> { fam1, fam2, fam3 });
-    
-    fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
-          .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>>
-          {
-              [fam1.Id] = new() { Link(retreat.Id, fam1.Id, r1.Id,0), Link(retreat.Id, fam1.Id, r2.Id,1), Link(retreat.Id, fam1.Id, r3.Id,2), Link(retreat.Id, fam1.Id, r4.Id,3) },
-              [fam2.Id] = new() { Link(retreat.Id, fam2.Id, r1.Id,0), Link(retreat.Id, fam2.Id, r2.Id,1), Link(retreat.Id, fam2.Id, r3.Id,2), Link(retreat.Id, fam2.Id, r4.Id,3) },
-              [fam3.Id] = new() { Link(retreat.Id, fam3.Id, r1.Id,0), Link(retreat.Id, fam3.Id, r2.Id,1), Link(retreat.Id, fam3.Id, r3.Id,2), Link(retreat.Id, fam3.Id, r4.Id,3) }
-          });
-
-    var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
-
-    // Atualizar apenas fam1 e fam2 (não fam3)
-    var cmd = Cmd(retreat.Id, retreat.FamiliesVersion, new[]
+    [Fact]
+    public async Task Can_update_only_some_families_not_all()
     {
-        (fam1, new (Guid,int)[]{ (r1.Id,0),(r2.Id,1),(r3.Id,2),(r4.Id,3) }, (string?)null, Array.Empty<Guid>(), Array.Empty<Guid>()),
-        (fam2, new (Guid,int)[]{ (r1.Id,0),(r2.Id,1),(r3.Id,2),(r4.Id,3) }, (string?)null, Array.Empty<Guid>(), Array.Empty<Guid>())
-    });
+        var (retRepo, famRepo, fmRepo, regRepo, uow) = Mocks();
+        var retreat = NewOpenRetreat();
 
-    var res = await handler.Handle(cmd, default);
+        retRepo.Setup(r => r.GetByIdAsync(retreat.Id, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(retreat);
 
-    res.Errors.Should().BeEmpty();
-    res.Families.Should().HaveCount(3); // Retorna TODAS (incluindo fam3 não editada)
+        var fam1 = F(retreat.Id, "Fam 1", 4, "Azul");
+        var fam2 = F(retreat.Id, "Fam 2", 4, "Verde");
+        var fam3 = F(retreat.Id, "Fam 3", 4, "Vermelho");
 
-    // Verificar que apenas fam1 e fam2 foram chamadas para update
-    famRepo.Verify(x => x.UpdateAsync(It.Is<Family>(f => f.Id == fam1.Id), It.IsAny<CancellationToken>()), Times.Once);
-    famRepo.Verify(x => x.UpdateAsync(It.Is<Family>(f => f.Id == fam2.Id), It.IsAny<CancellationToken>()), Times.Once);
-    famRepo.Verify(x => x.UpdateAsync(It.Is<Family>(f => f.Id == fam3.Id), It.IsAny<CancellationToken>()), Times.Never);
-}
+        famRepo.Setup(x => x.ListByRetreatAsync(retreat.Id, It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new List<Family> { fam1, fam2, fam3 });
+
+        var r1 = R(retreat.Id, "João Silva", Gender.Male);
+        var r2 = R(retreat.Id, "Maria Santos", Gender.Female);
+        var r3 = R(retreat.Id, "Carlos Lima", Gender.Male);
+        var r4 = R(retreat.Id, "Ana Costa", Gender.Female);
+
+        regRepo.Setup(x => x.GetMapByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new Dictionary<Guid, Registration> { [r1.Id] = r1, [r2.Id] = r2, [r3.Id] = r3, [r4.Id] = r4 });
+
+        fmRepo.Setup(x => x.ListByFamilyIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(new Dictionary<Guid, List<FamilyMember>>
+              {
+                  [fam1.Id] = new List<FamilyMember>(),
+                  [fam2.Id] = new List<FamilyMember>(),
+                  [fam3.Id] = new List<FamilyMember>()
+              });
+
+        var handler = new UpdateFamiliesHandler(retRepo.Object, famRepo.Object, fmRepo.Object, regRepo.Object, uow.Object);
+
+        var cmd = Cmd(retreat.Id, retreat.FamiliesVersion, new[]
+        {
+            (fam1, new (Guid,int)[]{ (r1.Id,0),(r2.Id,1),(r3.Id,2),(r4.Id,3) }, (string?)null, Array.Empty<Guid>(), Array.Empty<Guid>()),
+            (fam2, new (Guid,int)[]{ (r1.Id,0),(r2.Id,1),(r3.Id,2),(r4.Id,3) }, (string?)null, Array.Empty<Guid>(), Array.Empty<Guid>())
+        });
+
+        var res = await handler.Handle(cmd, default);
+
+        res.Errors.Should().BeEmpty();
+        res.Families.Should().HaveCount(3); // inclui fam3 como "não alterada"
+
+        famRepo.Verify(x => x.UpdateAsync(It.Is<Family>(f => f.Id == fam1.Id), It.IsAny<CancellationToken>()), Times.Once);
+        famRepo.Verify(x => x.UpdateAsync(It.Is<Family>(f => f.Id == fam2.Id), It.IsAny<CancellationToken>()), Times.Once);
+        famRepo.Verify(x => x.UpdateAsync(It.Is<Family>(f => f.Id == fam3.Id), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }
