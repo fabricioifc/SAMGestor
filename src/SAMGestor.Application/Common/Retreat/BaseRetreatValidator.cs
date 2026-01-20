@@ -9,79 +9,94 @@ public abstract class BaseRetreatValidator<T> : AbstractValidator<T>
     {
         
         RuleFor(x => x.Name)
-            .NotNull().WithMessage("Name is required.");
+            .NotNull().WithMessage("Nome é obrigatório.");
 
         RuleFor(x => x.Name.Value)
-            .NotEmpty().WithMessage("Name cannot be empty.")
-            .MaximumLength(120).WithMessage("Name cannot exceed 120 characters.")
+            .NotEmpty().WithMessage("Nome não pode ser vazio.")
+            .MaximumLength(120).WithMessage("Nome não pode exceder 120 caracteres.")
             .When(x => x.Name is not null);
-
-       
+        
         RuleFor(x => x.Edition)
-            .NotEmpty().WithMessage("Edition is required.")
-            .MaximumLength(50).WithMessage("Edition cannot exceed 50 characters.");
-
+            .NotEmpty().WithMessage("Edição é obrigatória.")
+            .MaximumLength(30).WithMessage("Edição não pode exceder 30 caracteres.");
         
         RuleFor(x => x.Theme)
-            .NotEmpty().WithMessage("Theme is required.")
-            .MaximumLength(120).WithMessage("Theme cannot exceed 120 characters.");
-
+            .NotEmpty().WithMessage("Tema é obrigatório.")
+            .MaximumLength(120).WithMessage("Tema não pode exceder 120 caracteres.");
         
         RuleFor(x => x.StartDate)
-            .NotEmpty().WithMessage("StartDate is required.");
+            .NotEmpty().WithMessage("Data de início é obrigatória.")
+            .GreaterThan(DateOnly.FromDateTime(DateTime.Today))
+            .WithMessage("Data de início deve ser futura.");
 
         RuleFor(x => x.EndDate)
-            .NotEmpty().WithMessage("EndDate is required.")
+            .NotEmpty().WithMessage("Data de término é obrigatória.")
             .GreaterThan(x => x.StartDate)
-            .WithMessage("EndDate must be after StartDate.");
-
+            .WithMessage("Data de término deve ser posterior à data de início.");
+        
         RuleFor(x => x.RegistrationStart)
-            .NotEmpty().WithMessage("RegistrationStart is required.");
+            .NotEmpty().WithMessage("Data de início das inscrições é obrigatória.");
 
         RuleFor(x => x.RegistrationEnd)
-            .NotEmpty().WithMessage("RegistrationEnd is required.")
+            .NotEmpty().WithMessage("Data de término das inscrições é obrigatória.")
             .GreaterThan(x => x.RegistrationStart)
-            .WithMessage("RegistrationEnd must be after RegistrationStart.");
-
-       
+            .WithMessage("Data de término das inscrições deve ser posterior à data de início.");
+        
+        RuleFor(x => x.StartDate)
+            .GreaterThan(x => x.RegistrationEnd)
+            .WithMessage("O retiro deve começar após o término das inscrições.");
+        
         RuleFor(x => x.MaleSlots)
-            .GreaterThanOrEqualTo(0).WithMessage("MaleSlots must be greater than or equal to 0.");
+            .GreaterThanOrEqualTo(0).WithMessage("Vagas masculinas devem ser maiores ou iguais a 0.");
 
         RuleFor(x => x.FemaleSlots)
-            .GreaterThanOrEqualTo(0).WithMessage("FemaleSlots must be greater than or equal to 0.");
+            .GreaterThanOrEqualTo(0).WithMessage("Vagas femininas devem ser maiores ou iguais a 0.");
 
+        RuleFor(x => x)
+            .Must(cmd => cmd.MaleSlots > 0 || cmd.FemaleSlots > 0)
+            .WithMessage("Deve haver pelo menos uma vaga disponível (masculina ou feminina).");
         
         RuleFor(x => x.FeeFazer)
-            .NotNull().WithMessage("FeeFazer is required.");
+            .NotNull().WithMessage("Taxa para FAZER é obrigatória.");
 
         RuleFor(x => x.FeeFazer.Amount)
-            .GreaterThanOrEqualTo(0).WithMessage("FeeFazer amount must be >= 0.")
+            .GreaterThanOrEqualTo(0).WithMessage("Valor da taxa FAZER deve ser maior ou igual a 0.")
             .When(x => x.FeeFazer is not null);
 
         RuleFor(x => x.FeeFazer.Currency)
-            .NotEmpty().WithMessage("FeeFazer currency is required.")
+            .NotEmpty().WithMessage("Moeda da taxa FAZER é obrigatória.")
             .When(x => x.FeeFazer is not null);
-
         
         RuleFor(x => x.FeeServir)
-            .NotNull().WithMessage("FeeServir is required.");
+            .NotNull().WithMessage("Taxa para SERVIR é obrigatória.");
 
         RuleFor(x => x.FeeServir.Amount)
-            .GreaterThanOrEqualTo(0).WithMessage("FeeServir amount must be >= 0.")
+            .GreaterThanOrEqualTo(0).WithMessage("Valor da taxa SERVIR deve ser maior ou igual a 0.")
             .When(x => x.FeeServir is not null);
 
         RuleFor(x => x.FeeServir.Currency)
-            .NotEmpty().WithMessage("FeeServir currency is required.")
+            .NotEmpty().WithMessage("Moeda da taxa SERVIR é obrigatória.")
             .When(x => x.FeeServir is not null);
-
-        RuleFor(x => x.WestRegionPct)
-            .NotNull().WithMessage("WestRegionPct is required.");
-
-        RuleFor(x => x.OtherRegionPct)
-            .NotNull().WithMessage("OtherRegionPct is required.");
-
-        RuleFor(x => x)
-            .Must(cmd => cmd.WestRegionPct?.Value + cmd.OtherRegionPct?.Value == 100)
-            .WithMessage("WestRegionPct + OtherRegionPct must equal 100.");
+        
+        RuleFor(x => x.ShortDescription)
+            .MaximumLength(200).WithMessage("Descrição curta não pode exceder 200 caracteres.")
+            .When(x => !string.IsNullOrWhiteSpace(x.ShortDescription));
+        
+        RuleFor(x => x.LongDescription)
+            .MaximumLength(5000).WithMessage("Descrição longa não pode exceder 5000 caracteres.")
+            .When(x => !string.IsNullOrWhiteSpace(x.LongDescription));
+        
+        RuleFor(x => x.Location)
+            .MaximumLength(200).WithMessage("Local não pode exceder 200 caracteres.")
+            .When(x => !string.IsNullOrWhiteSpace(x.Location));
+        
+        RuleFor(x => x.ContactEmail)
+            .EmailAddress().WithMessage("Email de contato inválido.")
+            .MaximumLength(100).WithMessage("Email de contato não pode exceder 100 caracteres.")
+            .When(x => !string.IsNullOrWhiteSpace(x.ContactEmail));
+        
+        RuleFor(x => x.ContactPhone)
+            .MaximumLength(20).WithMessage("Telefone de contato não pode exceder 20 caracteres.")
+            .When(x => !string.IsNullOrWhiteSpace(x.ContactPhone));
     }
 }
