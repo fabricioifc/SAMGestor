@@ -21,7 +21,6 @@ public class SAMContext(DbContextOptions<SAMContext> options) : DbContext(option
     public DbSet<MessageSent>        MessagesSent        => Set<MessageSent>();
     public DbSet<MessageTemplate>    MessageTemplates    => Set<MessageTemplate>();
     public DbSet<ChangeLog>          ChangeLogs          => Set<ChangeLog>();
-    public DbSet<RegionConfig>       RegionConfigs       => Set<RegionConfig>();
     public DbSet<BlockedCpf>         BlockedCpfs         => Set<BlockedCpf>();
     public DbSet<WaitingListItem>    WaitingListItems    => Set<WaitingListItem>();
     public DbSet<OutboxMessage>      OutboxMessages      => Set<OutboxMessage>();

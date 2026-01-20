@@ -73,12 +73,7 @@ public class ServiceRegistrationConfiguration : IEntityTypeConfiguration<Service
             .HasColumnName("city")
             .HasMaxLength(120)
             .IsRequired();
-
-        builder.Property(x => x.Region)
-            .HasColumnName("region")
-            .HasMaxLength(120)
-            .IsRequired();
-
+        
         builder.Property(x => x.Status)
             .HasColumnName("status")
             .HasConversion<string>()   
