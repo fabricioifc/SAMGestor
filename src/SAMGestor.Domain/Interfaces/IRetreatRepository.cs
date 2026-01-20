@@ -1,4 +1,5 @@
 using SAMGestor.Domain.Entities;
+using SAMGestor.Domain.Enums;
 using SAMGestor.Domain.ValueObjects;
 
 namespace SAMGestor.Domain.Interfaces;
@@ -8,19 +9,31 @@ public interface IRetreatRepository
     Task AddAsync(Retreat retreat, CancellationToken ct = default);
 
     Task<Retreat?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    
+    Task<Retreat?> GetByIdWithDetailsAsync(Guid id, CancellationToken ct = default);
 
     Task<bool> ExistsByNameEditionAsync(
         FullName name,
-        string   edition,
+        string edition,
         CancellationToken ct = default);
     
     Task<(List<Retreat> Items, int TotalCount)> ListAsync(
         int skip,
         int take,
+        RetreatStatus? status = null,
+        bool? isPubliclyVisible = null,
         CancellationToken ct = default);
-    Task<int> CountAsync(CancellationToken ct = default); 
     
+    Task<(List<Retreat> Items, int TotalCount)> ListPublicRetreatsAsync(
+        int skip,
+        int take,
+        CancellationToken ct = default);
+
+    Task<int> CountAsync(CancellationToken ct = default);
+
     Task RemoveAsync(Retreat retreat, CancellationToken ct = default);
-    
+
     Task UpdateAsync(Retreat retreat, CancellationToken ct = default);
+    
+    Task<Retreat?> GetByEmergencyCodeAsync(string code, CancellationToken ct = default);
 }

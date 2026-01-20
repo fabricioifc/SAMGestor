@@ -14,7 +14,6 @@ public class ServiceRegistration : Entity<Guid>
     public DateOnly     BirthDate   { get; private set; }
     public Gender       Gender      { get; private set; }
     public string       City        { get; private set; } = default!;
-    public string       Region      { get; private set; } = default!;
     public UrlAddress?  PhotoUrl    { get; private set; }
 
     public Guid   RetreatId         { get; private set; }
@@ -34,7 +33,6 @@ public class ServiceRegistration : Entity<Guid>
         DateOnly birthDate,
         Gender gender,
         string city,
-        string region,
         Guid? preferredSpaceId = null,
         UrlAddress? photoUrl   = null)
     {
@@ -47,7 +45,6 @@ public class ServiceRegistration : Entity<Guid>
         BirthDate     = birthDate;
         Gender        = gender;
         City          = city.Trim();
-        Region        = region.Trim();
         PhotoUrl      = photoUrl;
 
         PreferredSpaceId = preferredSpaceId;
