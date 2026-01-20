@@ -6,41 +6,62 @@ using SAMGestor.Domain.Interfaces;
 
 namespace SAMGestor.Application.Features.Retreats.Update;
 
-public sealed class UpdateRetreatHandler(IRetreatRepository repo, IUnitOfWork uow)
-    : IRequestHandler<UpdateRetreatCommand, UpdateRetreatResponse>
+public sealed class UpdateRetreatHandler : IRequestHandler<UpdateRetreatCommand, UpdateRetreatResponse>
 {
+    private readonly IRetreatRepository _repo;
+    private readonly IUnitOfWork _uow;
+
+    public UpdateRetreatHandler(IRetreatRepository repo, IUnitOfWork uow)
+    {
+        _repo = repo;
+        _uow = uow;
+    }
+
     public async Task<UpdateRetreatResponse> Handle(
         UpdateRetreatCommand cmd,
-        CancellationToken    ct)
+        CancellationToken ct)
     {
-        var retreat = await repo.GetByIdAsync(cmd.Id, ct);
+        var retreat = await _repo.GetByIdAsync(cmd.Id, ct);
         if (retreat is null)
             throw new NotFoundException(nameof(Retreat), cmd.Id);
         
+        if (!retreat.IsActive())
+            throw new BusinessRuleException(
+                "Não é possível atualizar um retiro cancelado ou finalizado.");
+
         if ((string)retreat.Name != (string)cmd.Name || retreat.Edition != cmd.Edition)
         {
-            var duplicated = await repo.ExistsByNameEditionAsync(cmd.Name, cmd.Edition, ct);
+            var duplicated = await _repo.ExistsByNameEditionAsync(cmd.Name, cmd.Edition, ct);
             if (duplicated)
-                throw new BusinessRuleException("Retreat with same name and edition already exists.");
+                throw new BusinessRuleException(
+                    "Já existe outro retiro com este nome e edição.");
         }
-
+        
         retreat.UpdateDetails(
-            cmd.Name,
-            cmd.Edition,
-            cmd.Theme,
-            cmd.StartDate,
-            cmd.EndDate,
-            cmd.MaleSlots,
-            cmd.FemaleSlots,
-            cmd.RegistrationStart,
-            cmd.RegistrationEnd,
-            cmd.FeeFazer,
-            cmd.FeeServir,
-            cmd.WestRegionPct,
-            cmd.OtherRegionPct);
+            name: cmd.Name,
+            edition: cmd.Edition,
+            theme: cmd.Theme,
+            startDate: cmd.StartDate,
+            endDate: cmd.EndDate,
+            maleSlots: cmd.MaleSlots,
+            femaleSlots: cmd.FemaleSlots,
+            registrationStart: cmd.RegistrationStart,
+            registrationEnd: cmd.RegistrationEnd,
+            feeFazer: cmd.FeeFazer,
+            feeServir: cmd.FeeServir,
+            modifiedByUserId: cmd.ModifiedByUserId,
+            shortDescription: cmd.ShortDescription,
+            longDescription: cmd.LongDescription,
+            location: cmd.Location,
+            contactEmail: cmd.ContactEmail,
+            contactPhone: cmd.ContactPhone
+        );
+        
+        await _uow.SaveChangesAsync(ct);
 
-        await uow.SaveChangesAsync(ct);
-
-        return new UpdateRetreatResponse(retreat.Id);
+        return new UpdateRetreatResponse(
+            Id: retreat.Id,
+            Message: "Retiro atualizado com sucesso."
+        );
     }
 }
