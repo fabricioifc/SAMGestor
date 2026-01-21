@@ -64,5 +64,7 @@ public sealed record CreateRegistrationCommand(
     string  TermsVersion,
     bool?   MarketingOptIn,
     string? ClientIp,
-    string? UserAgent
+    string? UserAgent,
+    
+    string? EmergencyCode = null
 ) : IRequest<CreateRegistrationResponse>;

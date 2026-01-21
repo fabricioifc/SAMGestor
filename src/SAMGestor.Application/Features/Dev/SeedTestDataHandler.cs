@@ -199,7 +199,6 @@ public sealed class SeedTestDataHandler : IRequestHandler<SeedTestDataCommand, S
                 reg.BirthDate,
                 reg.Gender,
                 reg.City,
-                reg.State.ToString(),
                 preferredSpaceId: faker.PickRandom(spaces).Id // preferência aleatória
             );
 
@@ -258,7 +257,6 @@ public sealed class SeedTestDataHandler : IRequestHandler<SeedTestDataCommand, S
                 reg.BirthDate,
                 reg.Gender,
                 reg.City,
-                reg.State.ToString(),
                 preferredSpaceId
             );
 
@@ -329,8 +327,12 @@ public sealed class SeedTestDataHandler : IRequestHandler<SeedTestDataCommand, S
             registrationEnd: today.AddDays(30),
             feeFazer: new Money(250.00m, "BRL"),
             feeServir: new Money(150.00m, "BRL"),
-            westPct: new Percentage(60),
-            othersPct: new Percentage(40)
+            createdByUserId: "SYSTEM_SEED",  
+            shortDescription: "Retiro de renovação espiritual e encontro com Cristo",  
+            longDescription: "Um final de semana de profunda experiência espiritual, reflexão e renovação da fé. Momentos de oração, partilha e comunhão com Deus e a comunidade.",  // ✅ NOVO - opcional
+            location: "Centro de Retiros - Caçador/SC",
+            contactEmail: "contato@comunidadesam.org", 
+            contactPhone: "(49) 3565-0790" 
         );
     }
 

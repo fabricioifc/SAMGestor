@@ -14,5 +14,7 @@ public sealed record CreateServiceRegistrationCommand(
     Gender       Gender,
     string       City,
     string       Region,
-    Guid?        PreferredSpaceId
+    Guid?        PreferredSpaceId,
+    
+    string? EmergencyCode = null
 ) : IRequest<CreateServiceRegistrationResponse>;

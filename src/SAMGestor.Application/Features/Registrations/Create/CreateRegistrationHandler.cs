@@ -17,23 +17,29 @@ public sealed class CreateRegistrationHandler(
         CreateRegistrationCommand cmd,
         CancellationToken ct)
     {
-        // 1) Retreat válido e janela aberta
+       
         var retreat = await retRepo.GetByIdAsync(cmd.RetreatId, ct);
         if (retreat is null)
             throw new NotFoundException(nameof(Retreat), cmd.RetreatId);
-
+        
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        if (!retreat.RegistrationWindowOpen(today))
-            throw new BusinessRuleException("Registration period closed.");
-
-        // 2) Regras de unicidade/banimento
+        var canRegister = retreat.CanAcceptRegistrations(today, cmd.EmergencyCode);
+        
+        if (!canRegister)
+        {
+            var message = string.IsNullOrWhiteSpace(cmd.EmergencyCode)
+                ? "Período de inscrições encerrado. Se você possui um código de emergência, informe-o."
+                : "Código de emergência inválido, expirado ou já utilizado.";
+            
+            throw new BusinessRuleException(message);
+        }
+        
         if (await regRepo.IsCpfBlockedAsync(cmd.Cpf, ct))
-            throw new BusinessRuleException("CPF is blocked.");
+            throw new BusinessRuleException("CPF está bloqueado.");
 
         if (await regRepo.ExistsByCpfInRetreatAsync(cmd.Cpf, cmd.RetreatId, ct))
-            throw new BusinessRuleException("CPF already registered for this retreat.");
-
-        // 3) Criação da entidade (status inicial de inscrição)
+            throw new BusinessRuleException("CPF já inscrito neste retiro.");
+        
         var reg = new Registration(
             cmd.Name,
             cmd.Cpf,
@@ -76,15 +82,19 @@ public sealed class CreateRegistrationHandler(
         reg.SetMedications(cmd.TakesMedication, cmd.MedicationsDetails);
         reg.SetPhysicalLimitationDetails(cmd.PhysicalLimitationDetails);
         reg.SetRecentSurgeryOrProcedureDetails(cmd.RecentSurgeryOrProcedureDetails);
-
-        // Consentimentos
+        
         if (!cmd.TermsAccepted)
-            throw new BusinessRuleException("Terms must be accepted.");
+            throw new BusinessRuleException("Termos devem ser aceitos.");
         reg.AcceptTerms(cmd.TermsVersion, DateTime.UtcNow);
         reg.SetMarketingOptIn(cmd.MarketingOptIn ?? false, DateTime.UtcNow);
         reg.SetClientContext(cmd.ClientIp, cmd.UserAgent);
+        
+        if (!string.IsNullOrWhiteSpace(cmd.EmergencyCode))
+        {
+            retreat.IncrementEmergencyCodeUsage(cmd.EmergencyCode, "SYSTEM_REGISTRATION");
+            await retRepo.UpdateAsync(retreat, ct);
+        }
 
-        // 5) Persistência
         await regRepo.AddAsync(reg, ct);
         await uow.SaveChangesAsync(ct);
 

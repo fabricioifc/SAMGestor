@@ -13,7 +13,6 @@ public sealed record GetServiceRegistrationResponse(
     DateOnly BirthDate,
     Gender Gender,
     string City,
-    string Region,
     string? PhotoUrl,
     ServiceRegistrationStatus Status,
     bool   Enabled,

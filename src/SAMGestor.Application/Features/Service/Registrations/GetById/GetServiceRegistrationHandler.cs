@@ -55,7 +55,6 @@ public sealed class GetServiceRegistrationHandler(
             BirthDate: reg.BirthDate,
             Gender: reg.Gender,
             City: reg.City,
-            Region: reg.Region,
             PhotoUrl: reg.PhotoUrl?.Value,
             Status: reg.Status,
             Enabled: reg.Enabled,
