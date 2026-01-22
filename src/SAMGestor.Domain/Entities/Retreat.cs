@@ -528,20 +528,15 @@ public class Retreat : Entity<Guid>
     
     public bool CanAcceptRegistrations(DateOnly today, string? emergencyCode = null)
     {
-        
-        if (Status != RetreatStatus.RegistrationOpen && Status != RetreatStatus.Published)
-            return false;
-        
-        var withinPeriod = RegistrationWindowOpen(today);
-        if (withinPeriod)
-            return true;
-        
         if (!string.IsNullOrWhiteSpace(emergencyCode))
         {
             return ValidateEmergencyCode(emergencyCode, DateTime.UtcNow);
         }
-
-        return false;
+        
+        if (Status != RetreatStatus.RegistrationOpen)
+            return false;
+    
+        return RegistrationWindowOpen(today);
     }
     
     public bool RegistrationWindowOpen(DateOnly today) =>

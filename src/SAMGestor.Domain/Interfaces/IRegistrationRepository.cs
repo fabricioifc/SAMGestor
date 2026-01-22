@@ -63,4 +63,6 @@ public interface IRegistrationRepository
     Task AddRangeAsync(IEnumerable<Registration> registrations, CancellationToken ct = default);
     
     Task UpdateAsync(Registration registration, CancellationToken ct = default);
+    
+    Task<int> CountByRetreatAsync(Guid retreatId, CancellationToken ct = default);
 }
