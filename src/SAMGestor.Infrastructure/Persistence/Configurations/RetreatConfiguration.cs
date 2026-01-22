@@ -273,7 +273,7 @@ public class RetreatConfiguration : IEntityTypeConfiguration<Retreat>
 
             img.Property(i => i.StorageId)
                .HasColumnName("storage_id")
-               .HasMaxLength(100)
+               .HasMaxLength(250)
                .IsRequired();
 
             img.Property(i => i.Type)

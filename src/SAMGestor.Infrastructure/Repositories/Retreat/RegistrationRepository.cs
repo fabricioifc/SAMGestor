@@ -189,5 +189,12 @@ namespace SAMGestor.Infrastructure.Repositories.Retreat
             _ctx.Registrations.Update(registration);
             await Task.CompletedTask;
         }
+        
+        public async Task<int> CountByRetreatAsync(Guid retreatId, CancellationToken ct = default)
+        {
+            return await _ctx.Registrations
+                .Where(r => r.RetreatId == retreatId)
+                .CountAsync(ct);
+        }
     }
 }

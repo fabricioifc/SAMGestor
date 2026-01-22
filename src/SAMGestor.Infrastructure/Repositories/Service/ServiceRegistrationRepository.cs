@@ -87,4 +87,10 @@ public sealed class ServiceRegistrationRepository(SAMContext db) : IServiceRegis
         db.ServiceRegistrations.Update(serviceRegistration);
         return Task.CompletedTask;
     }
+    public async Task<int> CountByRetreatAsync(Guid retreatId, CancellationToken ct = default)
+    {
+        return await db.ServiceRegistrations
+            .Where(sr => sr.RetreatId == retreatId)
+            .CountAsync(ct);
+    }
 }
