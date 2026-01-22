@@ -6,20 +6,49 @@ using SAMGestor.Domain.Interfaces;
 
 namespace SAMGestor.Application.Features.Retreats.Delete;
 
-public sealed class DeleteRetreatHandler(IRetreatRepository repo, IUnitOfWork uow)
-    : IRequestHandler<DeleteRetreatCommand, DeleteRetreatResponse>
+public sealed class DeleteRetreatHandler : IRequestHandler<DeleteRetreatCommand, DeleteRetreatResponse>
 {
-    public async Task<DeleteRetreatResponse> Handle(
-        DeleteRetreatCommand cmd, CancellationToken ct)
+    private readonly IRetreatRepository _retreatRepo;
+    private readonly IRegistrationRepository _registrationRepo;
+    private readonly IServiceRegistrationRepository _serviceRegistrationRepo;
+    private readonly IUnitOfWork _uow;
+
+    public DeleteRetreatHandler(
+        IRetreatRepository retreatRepo,
+        IRegistrationRepository registrationRepo,
+        IServiceRegistrationRepository serviceRegistrationRepo,
+        IUnitOfWork uow)
     {
-        var retreat = await repo.GetByIdAsync(cmd.Id, ct);
+        _retreatRepo = retreatRepo;
+        _registrationRepo = registrationRepo;
+        _serviceRegistrationRepo = serviceRegistrationRepo;
+        _uow = uow;
+    }
+
+    public async Task<DeleteRetreatResponse> Handle(
+        DeleteRetreatCommand cmd,
+        CancellationToken ct)
+    {
+        var retreat = await _retreatRepo.GetByIdAsync(cmd.Id, ct);
         if (retreat is null)
             throw new NotFoundException(nameof(Retreat), cmd.Id);
+        
+        var fazerCount = await _registrationRepo.CountByRetreatAsync(cmd.Id, ct);
+        
+        var servirCount = await _serviceRegistrationRepo.CountByRetreatAsync(cmd.Id, ct);
+        
+        var totalRegistrations = fazerCount + servirCount;
 
-        // Futuro com fature implementada de incritos e contemplados ajustar para impedir remoção se houver confirmações
+        if (totalRegistrations > 0)
+        {
+            throw new BusinessRuleException(
+                $"Não é possível excluir o retiro porque existem {totalRegistrations} inscrição(ões) vinculada(s). " +
+                $"({fazerCount} Fazer, {servirCount} Servir). " +
+                $"Para remover o retiro do sistema, cancele-o ao invés de excluí-lo.");
+        }
 
-        await repo.RemoveAsync(retreat, ct);
-        await uow.SaveChangesAsync(ct);
+        await _retreatRepo.RemoveAsync(retreat, ct);
+        await _uow.SaveChangesAsync(ct);
 
         return new DeleteRetreatResponse(cmd.Id);
     }

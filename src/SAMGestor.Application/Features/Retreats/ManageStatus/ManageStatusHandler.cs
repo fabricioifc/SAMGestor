@@ -22,7 +22,6 @@ public sealed class ManageStatusHandler
         ManageStatusCommand cmd,
         CancellationToken ct)
     {
-        
         var retreat = await _repo.GetByIdAsync(cmd.RetreatId, ct);
         if (retreat is null)
             throw new NotFoundException(nameof(Retreat), cmd.RetreatId);
@@ -49,6 +48,23 @@ public sealed class ManageStatusHandler
 
     private static string ExecuteOpenRegistration(Retreat retreat, string userId)
     {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        
+        if (today < retreat.RegistrationStart)
+        {
+            throw new BusinessRuleException(
+                $"Não é possível abrir inscrições antes de {retreat.RegistrationStart:dd/MM/yyyy}. " +
+                $"A data de início das inscrições está definida para {retreat.RegistrationStart:dd/MM/yyyy}.");
+        }
+        
+        if (today > retreat.RegistrationEnd)
+        {
+            throw new BusinessRuleException(
+                $"Não é possível abrir inscrições após {retreat.RegistrationEnd:dd/MM/yyyy}. " +
+                $"O período de inscrições já encerrou. " +
+                $"Ajuste as datas ou use códigos de emergência.");
+        }
+
         retreat.OpenRegistration(userId);
         return "Inscrições abertas com sucesso! Participantes já podem se inscrever.";
     }

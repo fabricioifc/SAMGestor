@@ -39,6 +39,20 @@ public sealed class UploadRetreatImageHandler
 
         var fileExtension = Path.GetExtension(cmd.FileName).ToLowerInvariant();
         var replacedExisting = false;
+
+        
+        if (cmd.Type == ImageType.Gallery)
+        {
+            var galleryImages = retreat.GetGalleryImages().ToList();
+            var existingWithSameOrder = galleryImages.FirstOrDefault(img => img.Order == cmd.Order);
+
+            if (existingWithSameOrder != null)
+            {
+                throw new BusinessRuleException(
+                    $"Já existe uma imagem da galeria com ordem {cmd.Order}. " +
+                    $"Use uma ordem diferente ou reordene as imagens existentes antes.");
+            }
+        }
         
         if (cmd.Type == ImageType.Banner || cmd.Type == ImageType.Thumbnail)
         {
