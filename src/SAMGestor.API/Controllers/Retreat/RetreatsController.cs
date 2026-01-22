@@ -287,7 +287,7 @@ public class RetreatsController : ControllerBase
     /// Permite transições de status: OpenRegistration, CloseRegistration, Start, Complete, Cancel.
     /// Apenas Administradores e Gestores.
     /// </remarks>
-    [HttpPatch("{id:guid}/status")]
+    [HttpPut("{id:guid}/status")]
     [Authorize(Policy = Policies.ManagerOrAbove)]
     [SwaggerOperation(
         Summary = "Gerenciar status do retiro",
@@ -315,7 +315,7 @@ public class RetreatsController : ControllerBase
     /// Permite atualizar apenas email e telefone de contato.
     /// Apenas Administradores e Gestores.
     /// </remarks>
-    [HttpPatch("{id:guid}/contact")]
+    [HttpPut("{id:guid}/contact")]
     [Authorize(Policy = Policies.ManagerOrAbove)]
     [SwaggerOperation(
         Summary = "Atualizar contato",
@@ -497,7 +497,7 @@ public class RetreatsController : ControllerBase
     /// <remarks>
     /// Apenas Administradores e Gestores.
     /// </remarks>
-    [HttpDelete("{id:guid}/images/{storageId}")]
+    [HttpDelete("{id:guid}/images/{**storageId}")] 
     [Authorize(Policy = Policies.ManagerOrAbove)]
     [SwaggerOperation(
         Summary = "Remover imagem",
@@ -508,7 +508,10 @@ public class RetreatsController : ControllerBase
     public async Task<IActionResult> RemoveImage(Guid id, string storageId)
     {
         var userId = _currentUser.UserId!.Value.ToString();
-        var command = new RemoveRetreatImageCommand(id, storageId, userId);
+        
+        var decodedStorageId = Uri.UnescapeDataString(storageId);
+    
+        var command = new RemoveRetreatImageCommand(id, decodedStorageId, userId);
         var result = await _mediator.Send(command);
         return Ok(result);
     }

@@ -38,4 +38,8 @@
     <ProjectReference Include="..\SAMGestor.Infrastructure\SAMGestor.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="wwwroot\uploads\retreats\9b8838f6-0fad-4e54-b3eb-aa99cd285b1f\images\gallery\" />
+  </ItemGroup>
+
 </Project>
