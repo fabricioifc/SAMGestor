@@ -1,10 +1,10 @@
 namespace SAMGestor.Application.Dtos.Reports;
 
 public sealed record ReportContext(
-    string ReportId,
-    string Title,
-    string TemplateKey,
-    Guid? RetreatId,
-    string? DefaultParamsJson,
-    string? RetreatName      
+    string TemplateKey,       
+    Guid RetreatId,           
+    string RetreatName,
+    int Page,
+    int PageSize,
+    Dictionary<string, object>? Filters = null 
 );

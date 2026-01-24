@@ -20,4 +20,7 @@ public interface IReportingReadDb
     IReportingReadDb AsNoTracking();
 
     Task<List<T>> ToListAsync<T>(IQueryable<T> query, CancellationToken ct);
+    
+    Task<bool> AnyAsync<T>(IQueryable<T> query, CancellationToken ct);
+    Task<int> CountAsync<T>(IQueryable<T> query, CancellationToken ct);
 }
