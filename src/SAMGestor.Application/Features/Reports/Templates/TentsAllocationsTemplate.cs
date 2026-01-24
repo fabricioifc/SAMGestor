@@ -1,162 +1,265 @@
+// Application/Reports/Templates/TentsAllocationTemplate.cs
+
 using SAMGestor.Application.Dtos.Reports;
 using SAMGestor.Application.Interfaces.Reports;
 using SAMGestor.Domain.Enums;
 
 namespace SAMGestor.Application.Features.Reports.Templates;
 
-public sealed class TentsAllocationsTemplate : IDescribedReportTemplate
+/// <summary>
+/// Relatório de alocação de barracas com participantes pagos.
+/// Agrupa por barraca e lista rahamistas, madrinhas e padrinhos.
+/// Exibe família com cor para melhor visualização.
+/// </summary>
+
+public sealed class TentsAllocationTemplate : IReportTemplate
 {
-    public const string TemplateKeyConst = "tents.allocations";
-    public string Key => TemplateKeyConst;
-    public string DefaultTitle => "Barracas e Rahamistas (Pagos)";
+    public string Key => "tents-allocation";
+    public string DefaultTitle => "Alocação de Barracas";
 
     private readonly IReportingReadDb _readDb;
-    public TentsAllocationsTemplate(IReportingReadDb readDb) => _readDb = readDb;
-    
-    public ReportTemplateSchemaDto Describe() => new(
-        Key,
-        DefaultTitle,
-        new[]
-        {
-            new ColumnDef("tent", "Barraca"),
-            new ColumnDef("participant", "Rahamista"),
-            new ColumnDef("gender", "Sexo"),
-            new ColumnDef("family", "Família"),
-            new ColumnDef("shirt", "Camiseta")
-        },
-        new[] { "totalTents", "totalAssigned" },
-        SupportsPaging: true,
-        DefaultPageLimit: 50
-    );
 
-    public async Task<ReportPayload> GetDataAsync(ReportContext ctx, int page, int pageLimit, CancellationToken ct)
+    public TentsAllocationTemplate(IReportingReadDb readDb)
+        => _readDb = readDb;
+
+    public async Task<ReportPayload> GetDataAsync(
+        ReportContext ctx,
+        int skip,
+        int take,
+        CancellationToken ct)
     {
-        // tents por retiro (se informado)
-        var tentsQuery = _readDb.AsNoTracking().Tents.AsQueryable();
-        if (ctx.RetreatId.HasValue)
-            tentsQuery = tentsQuery.Where(t => t.RetreatId == ctx.RetreatId.Value);
-        var tents = await _readDb.ToListAsync(
-            tentsQuery.Select(t => new
+        if (ctx.RetreatId == Guid.Empty)
+            throw new ArgumentException("RetreatId é obrigatório para este relatório");
+
+        var retreatId = ctx.RetreatId;
+
+        var tentsQuery = _readDb.Tents
+            .Where(t => t.RetreatId == retreatId)
+            .OrderBy(t => t.Number.Value)
+            .Select(t => new
             {
                 t.Id,
-                Number = t.Number.Value, // se for value object
-                t.RetreatId
-            }),
-            ct
-        );
-        var tentById = tents.ToDictionary(t => t.Id, t => t.Number);
+                Number = t.Number.Value,
+                t.Capacity,
+                Category = t.Category
+            });
 
-        // confirmados por retiro
-        var regsBase = _readDb.AsNoTracking().Registrations
-            .Where(r => r.Status == RegistrationStatus.Confirmed);
-        if (ctx.RetreatId.HasValue)
-            regsBase = regsBase.Where(r => r.RetreatId == ctx.RetreatId.Value);
+        var tents = await _readDb.ToListAsync(tentsQuery, ct);
 
-        // pagos set
-        var paidIds = await _readDb.ToListAsync(
-            _readDb.AsNoTracking().Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
-            ct
-        );
-        var paidSet = paidIds.ToHashSet();
+        if (!tents.Any())
+            return CreateEmptyPayload(ctx);
 
-        // alocações do retiro
-        var allocations = await _readDb.ToListAsync(
-            _readDb.AsNoTracking().TentAssignments
-                .Select(a => new { a.TentId, a.RegistrationId }),
-            ct
-        );
+        var tentIds = tents.Select(t => t.Id).ToList();
 
-        // famílias map
-        var fm = await _readDb.ToListAsync(
-            _readDb.AsNoTracking().FamilyMembers
-                .Select(f => new { f.FamilyId, f.RegistrationId }),
-            ct
-        );
-        var families = await _readDb.ToListAsync(
-            _readDb.AsNoTracking().Families.Select(f => new { f.Id, Name = f.Name.Value }),
-            ct
-        );
-        var famById = families.ToDictionary(x => x.Id, x => x.Name);
+        var paymentsQuery = _readDb.Payments
+            .Where(p => p.Status == PaymentStatus.Paid)
+            .Select(p => p.RegistrationId);
 
-        // registros confirmados + pagos (para montar linhas)
-        var regs = await _readDb.ToListAsync(
-            regsBase
-                .Where(r => paidSet.Contains(r.Id))
-                .Select(r => new
-                {
-                    r.Id,
-                    Name = r.Name.Value,
-                    r.Gender,
-                    Shirt = r.ShirtSize.HasValue ? r.ShirtSize.Value.ToString() : "",
-                }),
-            ct
-        );
+        var paidRegistrationIds = await _readDb.ToListAsync(paymentsQuery, ct);
+        var paidSet = paidRegistrationIds.ToHashSet();
 
-        // junta: tent + participant + family
-        var rows = allocations
-            .Where(a => tentById.ContainsKey(a.TentId))
-            .Join(regs, a => a.RegistrationId, r => r.Id, (a, r) =>
+        var tentAssignmentsQuery = _readDb.TentAssignments
+            .Where(ta => tentIds.Contains(ta.TentId))
+            .Select(ta => new { ta.TentId, ta.RegistrationId });
+
+        var tentAssignments = await _readDb.ToListAsync(tentAssignmentsQuery, ct);
+
+        var assignedRegistrationIds = tentAssignments.Select(ta => ta.RegistrationId).ToList();
+
+        var registrationsQuery = _readDb.Registrations
+            .Where(r => assignedRegistrationIds.Contains(r.Id) &&
+                       r.Status == RegistrationStatus.Confirmed &&
+                       paidSet.Contains(r.Id))
+            .Select(r => new
             {
-                var famId = fm.FirstOrDefault(x => x.RegistrationId == r.Id)?.FamilyId;
-                var family = famId.HasValue && famById.TryGetValue(famId.Value, out var n) ? n : null;
-                return new
-                {
-                    TentLabel = tentById[a.TentId],
-                    Participant = r.Name,
-                    Gender = r.Gender.ToString(),
-                    Family = family,
-                    Shirt = r.Shirt
-                };
-            })
-            .OrderBy(x => x.TentLabel)
-            .ThenBy(x => x.Participant)
-            .ToList();
+                r.Id,
+                Name = r.Name.Value,
+                Gender = r.Gender
+            });
 
-        // paginação opcional
-        var total = rows.Count;
-        var pageItems = pageLimit > 0 ? rows.Skip((page - 1) * pageLimit).Take(pageLimit) : rows;
+        var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
+        var regById = registrations.ToDictionary(r => r.Id);
+
+        var familyMembersQuery = _readDb.FamilyMembers
+            .Where(fm => assignedRegistrationIds.Contains(fm.RegistrationId))
+            .Select(fm => new
+            {
+                fm.FamilyId,
+                fm.RegistrationId,
+                fm.IsPadrinho,
+                fm.IsMadrinha
+            });
+
+        var familyMembers = await _readDb.ToListAsync(familyMembersQuery, ct);
+
+        var familyIds = familyMembers.Select(fm => fm.FamilyId).Distinct().ToList();
+
+        var familiesQuery = _readDb.Families
+            .Where(f => familyIds.Contains(f.Id))
+            .Select(f => new
+            {
+                f.Id,
+                Name = f.Name.Value,
+                Color = f.Color.HexCode
+            });
+
+        var families = await _readDb.ToListAsync(familiesQuery, ct);
+
+        var familyDict = families.ToDictionary(f => f.Id);
+        var memberDict = familyMembers.ToDictionary(fm => fm.RegistrationId);
+        
+        var allocationsData = new List<TentAllocationRow>();
+
+        foreach (var tent in tents)
+        {
+            var tentParticipants = tentAssignments
+                .Where(ta => ta.TentId == tent.Id)
+                .Select(ta =>
+                {
+                    if (!regById.TryGetValue(ta.RegistrationId, out var reg))
+                        return null;
+
+                    var member = memberDict.GetValueOrDefault(ta.RegistrationId);
+                    var familyId = member?.FamilyId;
+                    var family = familyId.HasValue && familyDict.TryGetValue(familyId.Value, out var fam)
+                        ? fam
+                        : null;
+
+                    var roleLabel = "Rahamista";
+                    var roleOrder = 1;
+
+                    if (member != null)
+                    {
+                        if (member.IsPadrinho)
+                        {
+                            roleLabel = "Padrinho";
+                            roleOrder = 2;
+                        }
+                        else if (member.IsMadrinha)
+                        {
+                            roleLabel = "Madrinha";
+                            roleOrder = 3;
+                        }
+                    }
+
+                    return new TentParticipantRow
+                    {
+                        RegistrationId = ta.RegistrationId,
+                        Name = reg.Name,
+                        Gender = reg.Gender.ToString().Substring(0, 1), // M/F
+                        FamilyName = family?.Name,
+                        FamilyColor = family?.Color ?? "#CCCCCC",
+                        Role = roleLabel,
+                        RoleOrder = roleOrder
+                    };
+                })
+                .Where(p => p != null)
+                .OrderBy(p => p!.RoleOrder) // Rahamistas primeiro
+                .ThenBy(p => p!.FamilyName ?? "ZZZ")
+                .ThenBy(p => p!.Name)
+                .ToList();
+
+            allocationsData.Add(new TentAllocationRow
+            {
+                TentNumber = tent.Number,
+                TentCapacity = tent.Capacity,
+                TentCategory = tent.Category.ToString(),
+                ParticipantCount = tentParticipants.Count,
+                Participants = tentParticipants!
+            });
+        }
 
         var columns = new[]
         {
-            new ColumnDef("tent",       "Barraca"),
-            new ColumnDef("participant","Rahamista"),
-            new ColumnDef("gender",     "Sexo"),
-            new ColumnDef("family",     "Família"),
-            new ColumnDef("shirt",      "Camiseta")
+            new ColumnDef("tentNumber", "Barraca"),
+            new ColumnDef("participantName", "Nome"),
+            new ColumnDef("role", "Função"),
+            new ColumnDef("familyName", "Família"),
+            new ColumnDef("familyColor", "Cor Família"),
+            new ColumnDef("gender", "Sexo")
         };
 
-        var data = pageItems.Select(x =>
-            (IDictionary<string, object?>) new Dictionary<string, object?>
+        var data = new List<IDictionary<string, object?>>();
+
+        foreach (var tent in allocationsData)
+        {
+            var isFirstInTent = true;
+
+            foreach (var participant in tent.Participants)
             {
-                ["tent"]        = x.TentLabel,
-                ["participant"] = x.Participant,
-                ["gender"]      = x.Gender,
-                ["family"]      = x.Family,
-                ["shirt"]       = x.Shirt
-            }).ToList();
+                data.Add(new Dictionary<string, object?>
+                {
+                    ["tentNumber"] = isFirstInTent ? $"#{tent.TentNumber}" : "",
+                    ["participantName"] = participant.Name,
+                    ["role"] = participant.Role,
+                    ["familyName"] = participant.FamilyName ?? "Sem Família",
+                    ["familyColor"] = participant.FamilyColor,
+                    ["gender"] = participant.Gender
+                });
+
+                isFirstInTent = false;
+            }
+        }
+
+        var totalTents = allocationsData.Count;
+        var totalParticipants = allocationsData.Sum(t => t.ParticipantCount);
 
         var header = new ReportHeader(
-            ctx.ReportId,
-            string.IsNullOrWhiteSpace(ctx.Title) ? DefaultTitle : ctx.Title,
-            DateTime.UtcNow, 
-            ctx.RetreatId,
-            ctx.RetreatName
+            TemplateKey: Key,
+            Title: DefaultTitle,
+            Category: "Alocações",
+            GeneratedAt: DateTime.UtcNow,
+            RetreatId: retreatId,
+            RetreatName: ctx.RetreatName
         );
 
-        return new ReportPayload(
-            report: header,
-            columns: columns,
-            data: data,
-            summary: new Dictionary<string, object?>
-            {
-                ["totalTents"]    = tents.Count,
-                ["totalAssigned"] = rows.Count
-            },
-            total: total,
-            page: page,
-            pageLimit: pageLimit
+        var summary = new Dictionary<string, object?>
+        {
+            ["totalTents"] = totalTents,
+            ["totalParticipants"] = totalParticipants,
+            ["averagePerTent"] = totalTents > 0 ? Math.Round((double)totalParticipants / totalTents, 1) : 0
+        };
+
+        return new ReportPayload(header, columns, data, summary, totalParticipants, 1, 0);
+    }
+
+    private ReportPayload CreateEmptyPayload(ReportContext ctx)
+    {
+        var header = new ReportHeader(
+            TemplateKey: Key,
+            Title: DefaultTitle,
+            Category: "Alocações",
+            GeneratedAt: DateTime.UtcNow,
+            RetreatId: ctx.RetreatId,
+            RetreatName: ctx.RetreatName
         );
+
+        var columns = new[] { new ColumnDef("message", "Mensagem") };
+        var data = new List<IDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["message"] = "Nenhuma alocação de barraca encontrada" }
+        };
+
+        return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
+    }
+    
+    private class TentAllocationRow
+    {
+        public int TentNumber { get; set; }
+        public int TentCapacity { get; set; }
+        public string TentCategory { get; set; } = string.Empty;
+        public int ParticipantCount { get; set; }
+        public List<TentParticipantRow> Participants { get; set; } = new();
+    }
+
+    private class TentParticipantRow
+    {
+        public Guid RegistrationId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Gender { get; set; } = string.Empty;
+        public string? FamilyName { get; set; }
+        public string FamilyColor { get; set; } = "#CCCCCC";
+        public string Role { get; set; } = string.Empty;
+        public int RoleOrder { get; set; }
     }
 }

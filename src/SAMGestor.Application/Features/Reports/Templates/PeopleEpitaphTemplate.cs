@@ -4,97 +4,181 @@ using SAMGestor.Domain.Enums;
 
 namespace SAMGestor.Application.Features.Reports.Templates;
 
-public sealed class PeopleEpitaphTemplate : IDescribedReportTemplate
+/// <summary>
+/// Relatório de Lápides para atividade do retiro.
+/// Exibe foto, nome, data de nascimento, cidade e família dos contemplados pagos.
+/// </summary>
+
+public sealed class PeopleEpitaphTemplate : IReportTemplate
 {
-    public const string TemplateKeyConst = "people.epitaph";
-    public string Key => TemplateKeyConst;
-    public string DefaultTitle => "Lápides (Foto/Link/Data Nasc.)";
+    public string Key => "people-epitaph";
+    public string DefaultTitle => "Lápides dos Participantes";
 
     private readonly IReportingReadDb _readDb;
-    public PeopleEpitaphTemplate(IReportingReadDb readDb) => _readDb = readDb;
 
-    public ReportTemplateSchemaDto Describe() => new(
-        Key,
-        DefaultTitle,
-        new[]
-        {
-            new ColumnDef("name", "Nome"),
-            new ColumnDef("birthDate", "Nascimento"),
-            new ColumnDef("photoUrl", "Foto/Link"),
-            new ColumnDef("city", "Cidade"),
-            new ColumnDef("family", "Família")
-        },
-        new[] { "total" },
-        SupportsPaging: true,
-        DefaultPageLimit: 50
-    );
+    public PeopleEpitaphTemplate(IReportingReadDb readDb)
+        => _readDb = readDb;
 
-    public async Task<ReportPayload> GetDataAsync(ReportContext ctx, int page, int pageLimit, CancellationToken ct)
+    public async Task<ReportPayload> GetDataAsync(
+        ReportContext ctx,
+        int skip,
+        int take,
+        CancellationToken ct)
     {
-        var regsBase = _readDb.AsNoTracking().Registrations.Where(r => r.Status == RegistrationStatus.Confirmed);
-        if (ctx.RetreatId.HasValue) regsBase = regsBase.Where(r => r.RetreatId == ctx.RetreatId.Value);
+        if (ctx.RetreatId == Guid.Empty)
+            throw new ArgumentException("RetreatId é obrigatório para este relatório");
 
-        var paidIds = await _readDb.ToListAsync(
-            _readDb.AsNoTracking().Payments.Where(p => p.Status == PaymentStatus.Paid).Select(p => p.RegistrationId), ct);
-        var paidSet = paidIds.ToHashSet();
+        var retreatId = ctx.RetreatId;
 
-        var fm = await _readDb.ToListAsync(_readDb.AsNoTracking().FamilyMembers.Select(f => new { f.FamilyId, f.RegistrationId }), ct);
-        var families = await _readDb.ToListAsync(_readDb.AsNoTracking().Families.Select(f => new { f.Id, Name = f.Name.Value }), ct);
-        var famById = families.ToDictionary(x => x.Id, x => x.Name);
+        var registrations = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => r.RetreatId == retreatId && 
+                           r.Status == RegistrationStatus.Selected)
+                .Select(r => new {
+                    r.Id,
+                    Name = r.Name.Value,
+                    r.BirthDate,
+                    r.City,
+                    PhotoUrl = r.PhotoUrl != null ? r.PhotoUrl.Value : null,
+                    PhotoStorageKey = r.PhotoStorageKey
+                }),
+            ct);
 
-        var regs = await _readDb.ToListAsync(
-            regsBase.Where(r => paidSet.Contains(r.Id)).Select(r => new
-            {
-                r.Id,
-                Name = r.Name.Value,
-                r.City,
-                r.BirthDate,
-                Photo = r.PhotoUrl != null ? r.PhotoUrl.Value : null,
-                Doc = r.IdDocumentUrl != null ? r.IdDocumentUrl.Value : null
-            }), ct);
-
-        var rows = regs.Select(r =>
+        if (!registrations.Any())
         {
-            var famId = fm.FirstOrDefault(x => x.RegistrationId == r.Id)?.FamilyId;
-            var family = famId.HasValue && famById.TryGetValue(famId.Value, out var n) ? n : null;
-            var url = r.Photo ?? r.Doc ?? "";
-            return new
+            return CreateEmptyPayload(ctx);
+        }
+
+        var registrationIds = registrations.Select(r => r.Id).ToList();
+        var paidRegistrationIds = await _readDb.ToListAsync(
+            _readDb.Payments
+                .Where(p => registrationIds.Contains(p.RegistrationId) && 
+                           p.Status == PaymentStatus.Paid)
+                .Select(p => p.RegistrationId),
+            ct);
+
+        var paidSet = paidRegistrationIds.ToHashSet();
+
+        var familyMembers = await _readDb.ToListAsync(
+            _readDb.FamilyMembers
+                .Where(fm => registrationIds.Contains(fm.RegistrationId))
+                .Select(fm => new { fm.FamilyId, fm.RegistrationId }),
+            ct);
+
+        var familyIds = familyMembers.Select(fm => fm.FamilyId).Distinct().ToList();
+        var families = await _readDb.ToListAsync(
+            _readDb.Families
+                .Where(f => familyIds.Contains(f.Id))
+                .Select(f => new { f.Id, Name = f.Name.Value, Color = f.Color.HexCode }),
+            ct);
+
+        var familyDict = families.ToDictionary(f => f.Id);
+        var memberFamilyDict = familyMembers.ToDictionary(fm => fm.RegistrationId, fm => fm.FamilyId);
+
+        var allRows = registrations
+            .Where(r => paidSet.Contains(r.Id))
+            .Select(r =>
             {
-                r.Name,
-                r.City,
-                BirthDate = r.BirthDate.ToDateTime(TimeOnly.MinValue).ToString("yyyy-MM-dd"),
-                PhotoUrl = url,
-                Family = family
-            };
-        })
-        .OrderBy(x => x.Family ?? "ZZZ")
-        .ThenBy(x => x.Name)
-        .ToList();
+                var hasFamilyId = memberFamilyDict.TryGetValue(r.Id, out var familyId);
+                var family = hasFamilyId && familyDict.TryGetValue(familyId, out var fam) 
+                    ? fam 
+                    : null;
 
-        var total = rows.Count;
-        var pageItems = pageLimit > 0 ? rows.Skip((page - 1) * pageLimit).Take(pageLimit) : rows;
-
+                return new EpitaphRow
+                {
+                    Name = r.Name,
+                    BirthDate = r.BirthDate,
+                    City = r.City ?? "-",
+                    PhotoUrl = r.PhotoUrl,
+                    PhotoStorageKey = r.PhotoStorageKey,
+                    FamilyName = family?.Name,
+                    FamilyColor = family?.Color,
+                    FamilyOrder = family?.Name ?? "ZZZ_SEM_FAMILIA"
+                };
+            })
+            .OrderBy(r => r.FamilyOrder)
+            .ThenBy(r => r.Name)
+            .ToList();
+        
+        var totalRecords = allRows.Count;
+        var page = take > 0 ? (skip / take) + 1 : 1;
+        var pagedRows = take > 0 
+            ? allRows.Skip(skip).Take(take).ToList() 
+            : allRows;
+        
         var columns = new[]
         {
+            new ColumnDef("photoUrl", "Foto URL"),
+            new ColumnDef("photoStorageKey", "Foto Key"),
             new ColumnDef("name", "Nome"),
-            new ColumnDef("birthDate", "Nascimento"),
-            new ColumnDef("photoUrl", "Foto/Link"),
+            new ColumnDef("birthDate", "Data de Nascimento"),
             new ColumnDef("city", "Cidade"),
-            new ColumnDef("family", "Família")
+            new ColumnDef("familyName", "Família"),
+            new ColumnDef("familyColor", "Cor Família")
         };
 
-        var data = pageItems.Select(x => (IDictionary<string, object?>)new Dictionary<string, object?>
+        var data = pagedRows
+            .Select(r => (IDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["photoUrl"] = r.PhotoUrl,
+                ["photoStorageKey"] = r.PhotoStorageKey,
+                ["name"] = r.Name,
+                ["birthDate"] = r.BirthDate.ToString("dd/MM/yyyy"),
+                ["city"] = r.City,
+                ["familyName"] = r.FamilyName ?? "Sem Família",
+                ["familyColor"] = r.FamilyColor ?? "#CCCCCC"
+            })
+            .ToList();
+
+        var header = new ReportHeader(
+            TemplateKey: Key,
+            Title: DefaultTitle,
+            Category: "Participantes",
+            GeneratedAt: DateTime.UtcNow,
+            RetreatId: retreatId,
+            RetreatName: ctx.RetreatName
+        );
+
+        var summary = new Dictionary<string, object?>
         {
-            ["name"] = x.Name,
-            ["birthDate"] = x.BirthDate,
-            ["photoUrl"] = x.PhotoUrl,
-            ["city"] = x.City,
-            ["family"] = x.Family
-        }).ToList();
+            ["totalParticipants"] = totalRecords,
+            ["withFamily"] = allRows.Count(r => r.FamilyName != null),
+            ["withoutFamily"] = allRows.Count(r => r.FamilyName == null),
+            ["withPhoto"] = allRows.Count(r => !string.IsNullOrWhiteSpace(r.PhotoUrl))
+        };
 
-        var header = new ReportHeader(ctx.ReportId, string.IsNullOrWhiteSpace(ctx.Title) ? DefaultTitle : ctx.Title, DateTime.UtcNow, ctx.RetreatId, ctx.RetreatName);
+        return new ReportPayload(header, columns, data, summary, totalRecords, page, take);
+    }
 
-        return new ReportPayload(header, columns, data,
-            new Dictionary<string, object?> { ["total"] = total }, total, page, pageLimit);
+    private ReportPayload CreateEmptyPayload(ReportContext ctx)
+    {
+        var header = new ReportHeader(
+            TemplateKey: Key,
+            Title: DefaultTitle,
+            Category: "Participantes",
+            GeneratedAt: DateTime.UtcNow,
+            RetreatId: ctx.RetreatId,
+            RetreatName: ctx.RetreatName
+        );
+
+        var columns = new[] { new ColumnDef("message", "Mensagem") };
+        var data = new List<IDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["message"] = "Nenhum participante contemplado encontrado" }
+        };
+
+        return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
+    }
+    
+    private class EpitaphRow
+    {
+        public string Name { get; set; } = string.Empty;
+        public DateOnly BirthDate { get; set; }
+        public string City { get; set; } = string.Empty;
+        public string? PhotoUrl { get; set; }
+        public string? PhotoStorageKey { get; set; }
+        public string? FamilyName { get; set; }
+        public string? FamilyColor { get; set; }
+        public string FamilyOrder { get; set; } = string.Empty;
     }
 }

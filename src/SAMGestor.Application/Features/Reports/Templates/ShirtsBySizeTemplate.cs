@@ -4,104 +4,100 @@ using SAMGestor.Domain.Enums;
 
 namespace SAMGestor.Application.Features.Reports.Templates;
 
-public sealed class ShirtsBySizeTemplate : IDescribedReportTemplate
+/// <summary>
+/// Relatório de contagem de camisetas por tamanho dos contemplados pagos.
+/// </summary>
+
+public sealed class ShirtsBySizeTemplate : IReportTemplate
 {
-    public const string TemplateKeyConst = "shirts.by-size";
-    public string Key => TemplateKeyConst;
+    public string Key => "shirts-by-size";
     public string DefaultTitle => "Camisetas por Tamanho";
 
     private readonly IReportingReadDb _readDb;
 
-    public ShirtsBySizeTemplate(IReportingReadDb readDb) => _readDb = readDb;
-
-    private static string MapSize(ShirtSize s) => s switch
-    {
-     
-        ShirtSize.P  => "P",
-        ShirtSize.M  => "M",
-        ShirtSize.G  => "G",
-        ShirtSize.GG => "GG",
-        ShirtSize.GG1 => "GG1",
-        ShirtSize.GG2 => "GG2",
-        ShirtSize.GG3 => "GG3",
-        ShirtSize.GG4 => "GG4",
-        _ => "—" 
-    };
-    
-    public ReportTemplateSchemaDto Describe() => new(
-        Key,
-        DefaultTitle,
-        new[] { new ColumnDef("size","Tamanho"), new ColumnDef("count","Qtde") },
-        new[] { "totalParticipants" },
-        SupportsPaging: false,
-        DefaultPageLimit: 0
-    );
+    public ShirtsBySizeTemplate(IReportingReadDb readDb) 
+        => _readDb = readDb;
 
     public async Task<ReportPayload> GetDataAsync(
-        ReportContext ctx, int page, int pageLimit, CancellationToken ct)
+        ReportContext ctx,
+        int skip,
+        int take,
+        CancellationToken ct)
     {
+        if (ctx.RetreatId == Guid.Empty)
+            throw new ArgumentException("RetreatId é obrigatório para este relatório");
+
+        var retreatId = ctx.RetreatId;
         
-        var regs = _readDb.AsNoTracking().Registrations
-            .Where(r => r.Status == RegistrationStatus.Confirmed);
-
-        if (ctx.RetreatId.HasValue)
-            regs = regs.Where(r => r.RetreatId == ctx.RetreatId.Value);
-
-        var paidIds = await _readDb.ToListAsync(
-            _readDb.AsNoTracking().Payments
+        var registrations = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => r.RetreatId == retreatId && 
+                           r.Status == RegistrationStatus.Selected &&
+                           r.ShirtSize.HasValue)
+                .Select(r => new { r.Id, r.ShirtSize }),
+            ct);
+        
+        var paidRegistrationIds = await _readDb.ToListAsync(
+            _readDb.Payments
                 .Where(p => p.Status == PaymentStatus.Paid)
                 .Select(p => p.RegistrationId),
-            ct
-        );
-        var paidSet = paidIds.ToHashSet();
-        
-        var validSizes = await _readDb.ToListAsync(
-            regs
-                .Where(r => r.ShirtSize.HasValue && (int)r.ShirtSize.Value != 0 && paidSet.Contains(r.Id))
-                .Select(r => r.ShirtSize!.Value),
-            ct
-        );
+            ct);
 
-       
-        var grouped = validSizes
+        var paidSet = paidRegistrationIds.ToHashSet();
+        
+        var sizes = registrations
+            .Where(r => paidSet.Contains(r.Id) && r.ShirtSize.HasValue)
+            .Select(r => r.ShirtSize!.Value)
+            .ToList();
+        
+        var grouped = sizes
             .GroupBy(s => s)
             .Select(g => new { Size = g.Key, Count = g.Count() })
             .OrderBy(x => x.Size)
             .ToList();
-
+        
         var columns = new[]
         {
-            new ColumnDef("size",  "Tamanho"),
-            new ColumnDef("count", "Qtde")
+            new ColumnDef("size", "Tamanho de Camiseta"),
+            new ColumnDef("count", "Quantidade")
         };
 
         var data = grouped
-            .Select(x => (IDictionary<string, object?>) new Dictionary<string, object?>
+            .Select(x => (IDictionary<string, object?>)new Dictionary<string, object?>
             {
-                ["size"] = x.Size.ToString(),
+                ["size"] = MapSizeLabel(x.Size),
                 ["count"] = x.Count
             })
             .ToList();
 
         var header = new ReportHeader(
-            ctx.ReportId,
-            string.IsNullOrWhiteSpace(ctx.Title) ? DefaultTitle : ctx.Title,
-            DateTime.UtcNow, 
-            ctx.RetreatId,
-            ctx.RetreatName
+            TemplateKey: Key,
+            Title: DefaultTitle,
+            Category: "Logística",
+            GeneratedAt: DateTime.UtcNow,
+            RetreatId: retreatId,
+            RetreatName: ctx.RetreatName
         );
 
-        return new ReportPayload(
-            report: header,
-            columns: columns,
-            data: data,
-            summary: new Dictionary<string, object?>
-            {
-                ["totalParticipants"] = grouped.Sum(x => x.Count)
-            },
-            total: data.Count,
-            page: 1,
-            pageLimit: 0
-        );
+        var summary = new Dictionary<string, object?>
+        {
+            ["totalParticipants"] = sizes.Count,
+            ["totalShirts"] = sizes.Count
+        };
+
+        return new ReportPayload(header, columns, data, summary, data.Count, 1, 0);
     }
+
+    private static string MapSizeLabel(ShirtSize size) => size switch
+    {
+        ShirtSize.P => "P",
+        ShirtSize.M => "M",
+        ShirtSize.G => "G",
+        ShirtSize.GG => "GG",
+        ShirtSize.GG1 => "GG1",
+        ShirtSize.GG2 => "GG2",
+        ShirtSize.GG3 => "GG3",
+        ShirtSize.GG4 => "GG4",
+        _ => "Não definido"
+    };
 }
