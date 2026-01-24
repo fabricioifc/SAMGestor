@@ -3,4 +3,5 @@ using SAMGestor.Application.Dtos.Reports;
 
 namespace SAMGestor.Application.Features.Reports.TemplatesList;
 
-public sealed record GetTemplatesSchemasQuery() : IRequest<IReadOnlyList<ReportTemplateSchemaDto>>;
+public sealed record GetTemplatesSchemasQuery() 
+    : IRequest<IReadOnlyList<ReportTemplateInfoDto>>;

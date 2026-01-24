@@ -2,121 +2,140 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SAMGestor.API.Auth;
-using SAMGestor.Application.Common.Pagination;
 using SAMGestor.Application.Dtos.Reports;
-using SAMGestor.Application.Features.Reports.Create;
-using SAMGestor.Application.Features.Reports.Delete;
-using SAMGestor.Application.Features.Reports.GetDetail;
-using SAMGestor.Application.Features.Reports.List;
-using SAMGestor.Application.Features.Reports.ListByRetreat;
+using SAMGestor.Application.Features.Reports.ExportReport;
+using SAMGestor.Application.Features.Reports.GenerateReport;
+using SAMGestor.Application.Features.Reports.GetAvailableTemplates;
 using SAMGestor.Application.Features.Reports.TemplatesList;
-using SAMGestor.Application.Features.Reports.Update;
-using SAMGestor.Application.Interfaces.Reports;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace SAMGestor.API.Controllers.Reports;
 
 [ApiController]
 [Route("api/reports")]
-[SwaggerTag("Operações relacionadas às gerações de relatórios.")]
-[Authorize(Policy = Policies.ReadOnly)]
+[SwaggerTag("Operações relacionadas a relatórios de retiros.")]
+[Authorize(Policy = Policies.ReadOnly)] 
 public sealed class ReportsController : ControllerBase
 {
     private readonly IMediator _mediator;
+    
     public ReportsController(IMediator mediator) => _mediator = mediator;
 
-    /// <summary> Lista os relatórios disponíveis. (Admin,Gestor,Consultor)</summary>
-    [HttpGet]
-    public async Task<ActionResult<PagedResult<ReportListItemDto>>> List(
-        [FromQuery] int skip = 0, 
-        [FromQuery] int take = 10, 
-        CancellationToken ct = default)
-        => Ok(await _mediator.Send(new ListReportsQuery(skip, take), ct));
-
-    /// <summary> Cria um novo relatório. (Admin, Gestor)</summary>
-    [HttpPost]
-    [Authorize(Policy = Policies.ManagerOrAbove)]
-    public async Task<ActionResult<object>> Create([FromBody] CreateReportCommand cmd, CancellationToken ct)
-    {
-        var created = await _mediator.Send(cmd, ct);
-        return CreatedAtAction(nameof(Detail), new { id = created.Id }, new
-        {
-            id = created.Id,
-            title = created.Title,
-            dateCreation = created.DateCreation
-        });
-    }
-
-    /// <summary> Detalhe de um relatório.(Admin,Gestor,Consultor) </summary>
-    [HttpGet("{id}")]
-    public async Task<ActionResult<ReportPayload>> Detail(
-        string id, 
-        [FromQuery] int skip = 0, 
-        [FromQuery] int take = 0, 
-        CancellationToken ct = default)
-    {
-        var payload = await _mediator.Send(new GetReportDetailQuery(id, skip, take), ct);
-        if (payload is null) return NotFound(new { error = "Relatório não encontrado" });
-        return Ok(payload);
-    }
-
-    /// <summary> Atualiza dados básicos do relatório. (Admin, Gestor)</summary>
-    [HttpPut("{id}")]
-    [Authorize(Policy = Policies.ManagerOrAbove)]
-    public async Task<ActionResult<ReportListItemDto>> Update(string id, [FromBody] UpdateReportCommand body, CancellationToken ct)
-    {
-        var updated = await _mediator.Send(body with { Id = id }, ct);
-        if (updated is null) return NotFound(new { error = "Relatório não encontrado" });
-        return Ok(updated);
-    }
-
-    /// <summary> Exclui um relatório. (Admin, Gestor)</summary>
-    [HttpDelete("{id}")]
-    [Authorize(Policy = Policies.ManagerOrAbove)]
-    public async Task<ActionResult<object>> Delete(string id, CancellationToken ct)
-    {
-        var ok = await _mediator.Send(new DeleteReportCommand(id), ct);
-        if (!ok) return NotFound(new { error = "Relatório não encontrado" });
-        return Ok(new { message = "Relatório excluído com sucesso", id });
-    }
-    
-    /// <summary> Lista os templates de relatório disponíveis. (Admin,Gestor,Consultor)</summary>
+    /// <summary>
+    /// Lista todos os templates de relatórios disponíveis no sistema.
+    /// Retorna metadados sobre cada template (key, título, descrição, categoria).
+    /// </summary>
     [HttpGet("templates")]
-    public async Task<ActionResult<IReadOnlyList<ReportTemplateSchemaDto>>> Templates(CancellationToken ct)
-        => Ok(await _mediator.Send(new GetTemplatesSchemasQuery(), ct));    
-    
-    /// <summary> Lista os relatórios de um retiro. (Admin,Gestor,Consultor)</summary>
-    [HttpGet("retreats/{retreatId:guid}")]
-    public async Task<ActionResult<PagedResult<ReportListItemDto>>> ListByRetreat(
-        Guid retreatId, 
-        [FromQuery] int skip = 0, 
-        [FromQuery] int take = 10, 
+    [SwaggerOperation(
+        Summary = "Lista todos os templates disponíveis",
+        Description = "Retorna a lista completa de templates de relatórios disponíveis no sistema, " +
+                      "com informações sobre categoria, descrição e chave para geração. " +
+                      "Use este endpoint para popular dropdowns ou menus de seleção de relatórios."
+    )]
+    [SwaggerResponse(200, "Lista de templates retornada com sucesso", typeof(List<ReportTemplateInfoDto>))]
+    public async Task<ActionResult<List<ReportTemplateInfoDto>>> GetTemplates(
         CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new ListReportsByRetreatQuery(retreatId, skip, take), ct);
+        var query = new GetTemplatesSchemasQuery();
+        var result = await _mediator.Send(query, ct);
         return Ok(result);
     }
-    
-    public enum ReportExportFormat
-    {
-        csv,
-        pdf
-    }
-    
-    /// <summary> Exporta um relatório. (Admin,Gestor,Consultor)</summary>
-    [HttpGet("{id}/export")]
-    public async Task<IActionResult> Export(
-        string id,
-        [FromQuery] ReportExportFormat format = ReportExportFormat.csv,
-        [FromQuery] string? fileName = null,
+
+    /// <summary>
+    /// Lista os templates de relatórios disponíveis para um retiro específico.
+    /// Retorna metadados sobre cada relatório (título, descrição, se tem dados, etc).
+    /// </summary>
+    [HttpGet("retreats/{retreatId:guid}/templates")]
+    [SwaggerOperation(
+        Summary = "Lista templates disponíveis por retiro",
+        Description = "Retorna todos os templates de relatórios disponíveis para o retiro, " +
+                      "indicando quais já possuem dados e a quantidade estimada de registros. " +
+                      "Use este endpoint quando precisar validar se um retiro tem dados para determinado relatório."
+    )]
+    [SwaggerResponse(200, "Lista de templates retornada com sucesso", typeof(List<ReportTemplateInfoDto>))]
+    [SwaggerResponse(404, "Retiro não encontrado")]
+    public async Task<ActionResult<List<ReportTemplateInfoDto>>> GetAvailableTemplates(
+        [FromRoute] Guid retreatId,
         CancellationToken ct = default)
     {
-        // Export pega tudo (take=0)
-        var payload = await _mediator.Send(new GetReportDetailQuery(id, Skip: 0, Take: 0), ct);
-        if (payload is null) return NotFound(new { error = "Relatório não encontrado" });
+        var query = new GetAvailableTemplatesQuery(retreatId);
+        var result = await _mediator.Send(query, ct);
+        return Ok(result);
+    }
 
-        var exporter = HttpContext.RequestServices.GetRequiredService<IReportExporter>();
-        var (contentType, file, bytes) = await exporter.ExportAsync(payload, format.ToString(), fileName, ct);
-        return File(bytes, contentType, file);
+    /// <summary>
+    /// Gera um relatório específico retornando dados estruturados em JSON.
+    /// Pode usar esses dados para renderizar tabelas, gráficos, etc.
+    /// </summary>
+    [HttpGet("retreats/{retreatId:guid}/generate/{templateKey}")]
+    [SwaggerOperation(
+        Summary = "Gera relatório em JSON",
+        Description = "Retorna os dados do relatório em formato JSON estruturado, " +
+                      "incluindo colunas, dados, resumo e paginação. " +
+                      "O frontend renderiza esses dados na interface."
+    )]
+    [SwaggerResponse(200, "Relatório gerado com sucesso", typeof(ReportPayload))]
+    [SwaggerResponse(404, "Retiro ou template não encontrado")]
+    [SwaggerResponse(400, "Template inválido ou dados insuficientes")]
+    public async Task<ActionResult<ReportPayload>> GenerateReport(
+        [FromRoute] Guid retreatId,
+        [FromRoute] string templateKey,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var query = new GenerateReportQuery(retreatId, templateKey, page, pageSize);
+        var result = await _mediator.Send(query, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Exporta um relatório em formato específico (CSV, PDF, XLSX).
+    /// Retorna um arquivo para download.
+    /// </summary>
+    [HttpPost("retreats/{retreatId:guid}/export")]
+    [SwaggerOperation(
+        Summary = "Exporta relatório",
+        Description = "Gera e retorna o relatório no formato solicitado (CSV, PDF ou XLSX) " +
+                      "como um arquivo para download. " +
+                      "Formatos aceitos: 'csv', 'pdf', 'xlsx'. " +
+                      "Por padrão, exporta todos os registros (sem paginação)."
+    )]
+    [SwaggerResponse(200, "Arquivo gerado com sucesso")]
+    [SwaggerResponse(400, "Formato inválido ou template não encontrado")]
+    [SwaggerResponse(404, "Retiro não encontrado")]
+    public async Task<IActionResult> ExportReport(
+        [FromRoute] Guid retreatId,
+        [FromBody] ExportReportRequestDto request,
+        CancellationToken ct = default)
+    {
+        var command = new ExportReportCommand(
+            retreatId,
+            request.TemplateKey,
+            request.Format,
+            request.Page ?? 1,
+            request.PageSize ?? 10000  // Exportação pega tudo por padrão
+        );
+
+        var result = await _mediator.Send(command, ct);
+        
+        return File(result.Bytes, result.ContentType, result.FileName);
     }
 }
+
+/// <summary>
+/// Request para exportação de relatório
+/// </summary>
+public sealed record ExportReportRequestDto(
+    [SwaggerParameter("Chave do template (ex: 'people-epitaph', 'tents-allocation', etc.)")]
+    string TemplateKey,
+    
+    [SwaggerParameter("Formato do arquivo: 'csv', 'pdf' ou 'xlsx'")]
+    string Format,
+    
+    [SwaggerParameter("Página para exportação (padrão: 1)")]
+    int? Page = null,
+    
+    [SwaggerParameter("Quantidade de registros por página (padrão: 10000 - todos)")]
+    int? PageSize = null
+);
