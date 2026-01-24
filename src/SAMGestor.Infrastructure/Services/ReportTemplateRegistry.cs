@@ -1,6 +1,6 @@
 using SAMGestor.Application.Interfaces.Reports;
 
-namespace SAMGestor.Infrastructure.Repositories.Reports;
+namespace SAMGestor.Infrastructure.Services;
 
 public sealed class ReportTemplateRegistry : IReportTemplateRegistry
 {
@@ -16,11 +16,14 @@ public sealed class ReportTemplateRegistry : IReportTemplateRegistry
 
     public IReadOnlyList<IReportTemplate> GetAllTemplates()
     {
-        return _templates.Values.OrderBy(t => t.DefaultTitle).ToList();
+        return _templates.Values
+            .OrderBy(t => t.DefaultTitle)
+            .ToList();
     }
 
     public IReportTemplate? GetTemplate(string key)
     {
-        return _templates.GetValueOrDefault(key);
+        _templates.TryGetValue(key, out var template);
+        return template;
     }
 }

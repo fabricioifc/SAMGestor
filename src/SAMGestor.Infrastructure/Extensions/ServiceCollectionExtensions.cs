@@ -81,18 +81,8 @@ public static class ServiceCollectionExtensions
         services.AddValidatorsFromAssemblyContaining<CreateServiceSpaceValidator>();
         services.AddScoped<ITentRepository, TentRepository>();
         services.AddScoped<ITentAssignmentRepository, TentAssignmentRepository>();
-        services.AddScoped<IReportCatalog, ReportCatalogServiceRepository>();
-        services.AddScoped<IReportEngine, ReportEngineRepository>();
-        services.AddScoped<IReportTemplate, ShirtsBySizeTemplate>();
         services.AddScoped<IReportingReadDb, ReportingReadDb>();
-        services.AddValidatorsFromAssemblyContaining<Application.Features.Reports.Create.CreateReportValidator>();
-        services.AddScoped<IReportTemplate, ContemplatedGeneralTemplate>();
-        services.AddScoped<IReportTemplate, ContemplatedByFamilyTemplate>();
-        services.AddScoped<IReportTemplate, TentsAllocationsTemplate>();
-        services.AddScoped<IReportTemplate, PeopleEpitaphTemplate>();
-        services.AddScoped<IReportTemplateRegistry, ReportTemplateRegistryRepository>();
-        services.AddScoped<IReportExporter, CsvReportExporter>();
-        services.AddScoped<IReportExporter, DocumentReportExporter>();
+        services.AddScoped<IReportExporter, ReportExportService>();
         services.AddValidatorsFromAssemblyContaining<GetOverviewValidator>();
         services.AddValidatorsFromAssemblyContaining<GetFamiliesValidator>();
         services.AddValidatorsFromAssemblyContaining<GetPaymentsSeriesValidator>();
@@ -111,6 +101,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJwtTokenDecoder, JwtTokenDecoder>();
         services.AddScoped<IRawSqlExecutor, RawSqlExecutor>();
         services.AddScoped<IManualPaymentProofRepository, ManualPaymentProofRepository>();
+        services.AddScoped<RahamistasPerFamiliaTemplate>();
+        services.AddScoped<IReportTemplate, RahamistasPerFamiliaTemplate>(sp => 
+            sp.GetRequiredService<RahamistasPerFamiliaTemplate>());
+        services.AddScoped<ContemplatedParticipantsTemplate>();
+        services.AddScoped<IReportTemplate, ContemplatedParticipantsTemplate>(sp => 
+            sp.GetRequiredService<ContemplatedParticipantsTemplate>());
+        services.AddScoped<ShirtsBySizeTemplate>();
+        services.AddScoped<IReportTemplate, ShirtsBySizeTemplate>(sp => 
+            sp.GetRequiredService<ShirtsBySizeTemplate>());
+        services.AddScoped<PeopleEpitaphTemplate>();
+        services.AddScoped<IReportTemplate, PeopleEpitaphTemplate>(sp => 
+            sp.GetRequiredService<PeopleEpitaphTemplate>());
 
        
 

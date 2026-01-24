@@ -27,15 +27,19 @@ public sealed class ReportingReadDb : IReportingReadDb
     public IQueryable<Tent>           Tents            => Set<Tent>();
     public IQueryable<TentAssignment> TentAssignments  => Set<TentAssignment>();
 
-    // -------- Serviço (NOVOS) --------
     public IQueryable<ServiceSpace>               ServiceSpaces               => Set<ServiceSpace>();
     public IQueryable<ServiceRegistration>        ServiceRegistrations        => Set<ServiceRegistration>();
     public IQueryable<ServiceAssignment>          ServiceAssignments          => Set<ServiceAssignment>();
     public IQueryable<ServiceRegistrationPayment> ServiceRegistrationPayments => Set<ServiceRegistrationPayment>();
 
-    // -------- Utilitários --------
     public IReportingReadDb AsNoTracking() => new ReportingReadDb(_db, asNoTracking: true);
 
     public Task<List<T>> ToListAsync<T>(IQueryable<T> query, CancellationToken ct)
         => query.ToListAsync(ct);
+    
+    public Task<bool> AnyAsync<T>(IQueryable<T> query, CancellationToken ct)
+        => query.AnyAsync(ct);
+
+    public Task<int> CountAsync<T>(IQueryable<T> query, CancellationToken ct)
+        => query.CountAsync(ct);
 }

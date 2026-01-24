@@ -30,8 +30,6 @@ public class SAMContext(DbContextOptions<SAMContext> options) : DbContext(option
     public DbSet<ServiceAssignment>  ServiceAssignments  => Set<ServiceAssignment>();
     public DbSet<ServiceRegistrationPayment> ServiceRegistrationPayments => Set<ServiceRegistrationPayment>();
     public DbSet<TentAssignment> TentAssignments => Set<TentAssignment>();
-    public DbSet<Report> Reports => Set<Report>();
-    public DbSet<ReportInstance> ReportInstances => Set<ReportInstance>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<EmailConfirmationToken> EmailConfirmationTokens => Set<EmailConfirmationToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
