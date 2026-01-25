@@ -13,7 +13,7 @@ namespace SAMGestor.API.Controllers.Reports;
 
 [ApiController]
 [Route("api/reports")]
-[SwaggerTag("Operações relacionadas a relatórios de retiros.")]
+[SwaggerTag("Operações relacionadas a relatórios de retiros. (Admin,Gestor,Consultor)")]
 [Authorize(Policy = Policies.ReadOnly)] 
 public sealed class ReportsController : ControllerBase
 {
@@ -64,12 +64,11 @@ public sealed class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Gera um relatório específico retornando dados estruturados em JSON.
-    /// Pode usar esses dados para renderizar tabelas, gráficos, etc.
+    /// Gera um relatório específico,  dados estruturados em JSON.
     /// </summary>
+    
     [HttpGet("retreats/{retreatId:guid}/generate/{templateKey}")]
     [SwaggerOperation(
-        Summary = "Gera relatório em JSON",
         Description = "Retorna os dados do relatório em formato JSON estruturado, " +
                       "incluindo colunas, dados, resumo e paginação. " +
                       "O frontend renderiza esses dados na interface."

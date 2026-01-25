@@ -81,11 +81,6 @@ public class ClearSeedDataHandler : IRequestHandler<ClearSeedDataCommand, ClearS
             ct
         );
         
-        var reportsDeleted = await _sqlExecutor.ExecuteSqlAsync(
-            @"DELETE FROM core.reports 
-          WHERE retreat_id IN (SELECT ""Id"" FROM core.retreats WHERE name LIKE '%[SEED]%')",
-            ct
-        );
         
         var retreatsDeleted = await _sqlExecutor.ExecuteSqlAsync(
             @"DELETE FROM core.retreats WHERE name LIKE '%[SEED]%'",
@@ -102,7 +97,6 @@ public class ClearSeedDataHandler : IRequestHandler<ClearSeedDataCommand, ClearS
             ServiceSpacesDeleted = serviceSpacesDeleted,
             FamiliesDeleted = familiesDeleted,
             TentsDeleted = tentsDeleted,
-            ReportsDeleted = reportsDeleted
         };
     }
 }

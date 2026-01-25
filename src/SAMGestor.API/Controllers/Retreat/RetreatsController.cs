@@ -523,7 +523,7 @@ public class RetreatsController : ControllerBase
     /// Permite alterar a ordem de exibição de múltiplas imagens.
     /// Apenas Administradores e Gestores.
     /// </remarks>
-    [HttpPatch("{id:guid}/images/reorder")]
+    [HttpPut("{id:guid}/images/reorder")]
     [Authorize(Policy = Policies.ManagerOrAbove)]
     [SwaggerOperation(
         Summary = "Reordenar imagens",
