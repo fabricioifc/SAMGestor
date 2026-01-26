@@ -342,85 +342,171 @@ public sealed class ReportExportService : IReportExporter
     }
 
     // ========== PDF CUSTOMIZADO: Rahamistas por Família ==========
-    private static (string ContentType, string FileName, byte[] Bytes) ExportPdfRahamistasPerFamilia(
-        ReportPayload payload,
-        string name)
+ private static (string ContentType, string FileName, byte[] Bytes) ExportPdfRahamistasPerFamilia(
+    ReportPayload payload,
+    string name)
+{
+    var title = payload.report.Title ?? "Rahamistas por Família";
+    var retreatName = payload.report.RetreatName ?? "";
+
+    var pdfBytes = Document.Create(doc =>
     {
-        var title = payload.report.Title ?? "Rahamistas por Família";
-        var retreatName = payload.report.RetreatName ?? "";
-
-        var pdfBytes = Document.Create(doc =>
+        doc.Page(page =>
         {
-            doc.Page(page =>
+            page.Size(PageSizes.A4);
+            page.Margin(20);
+            page.DefaultTextStyle(x => x.FontSize(9));
+
+            // Header manual só no Content (aparece uma vez)
+            page.Content().Column(col =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(20);
-                page.DefaultTextStyle(x => x.FontSize(9));
+                col.Item().Text(title).FontSize(16).SemiBold();
+                if (!string.IsNullOrWhiteSpace(retreatName))
+                    col.Item().Text(retreatName).FontSize(11).FontColor(Colors.Grey.Darken1);
+                col.Item().PaddingBottom(15).Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
+                    .FontSize(8).FontColor(Colors.Grey.Darken2);
 
-                page.Header().Column(col =>
+                // Loop das famílias
+                foreach (var family in payload.data)
                 {
-                    col.Item().Text(title).FontSize(16).SemiBold();
-                    if (!string.IsNullOrWhiteSpace(retreatName))
-                        col.Item().Text(retreatName).FontSize(11).FontColor(Colors.Grey.Darken1);
-                    col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                        .FontSize(8).FontColor(Colors.Grey.Darken2);
-                });
+                    var familyName = GetStringValue(family, "familyName", "Sem Nome");
+                    var familyColor = GetStringValue(family, "familyColor", "#CCCCCC");
+                    var totalMembers = GetIntValue(family, "totalMembers", 0);
+                    var shirtSummary = GetStringValue(family, "shirtSummary", "");
 
-                page.Content().Column(col =>
-                {
-                    foreach (var row in payload.data)
+                    // Header da família
+                    col.Item().PaddingTop(15).PaddingBottom(5)
+                        .Background(familyColor)
+                        .Padding(8)
+                        .Text(familyName)
+                        .FontSize(14)
+                        .SemiBold()
+                        .FontColor(Colors.White);
+
+                    // ===== TABELA DE PADRINHOS/MADRINHAS =====
+                    var padrinhos = GetArrayValue(family, "padrinhos");
+                    if (padrinhos.Any())
                     {
-                        var familyName = GetStringValue(row, "familyName", "Sem Nome");
-                        var familyColor = GetStringValue(row, "familyColor", "#CCCCCC");
-
-                        col.Item().PaddingTop(15).PaddingBottom(5)
-                            .Background(familyColor)
-                            .Padding(8)
-                            .Text(familyName)
-                            .FontSize(14)
-                            .SemiBold()
-                            .FontColor(Colors.White);
-
-                        col.Item().PaddingTop(10).Table(table =>
-                        {
-                            table.ColumnsDefinition(columns =>
-                            {
-                                columns.ConstantColumn(30);
-                                columns.RelativeColumn(3);
-                                columns.RelativeColumn(2);
-                            });
-
-                            table.Header(header =>
-                            {
-                                header.Cell().Element(HeaderStyle).Text("#");
-                                header.Cell().Element(HeaderStyle).Text("Nome");
-                                header.Cell().Element(HeaderStyle).Text("Gênero");
-                            });
-
-                            var idx = 1;
-                            foreach (var member in payload.data.Where(d => GetStringValue(d, "familyName") == familyName))                            {
-                                var memberName = GetStringValue(member, "name");
-                                var gender = GetStringValue(member, "gender");
-
-                                table.Cell().Element(DataCell).Text(idx.ToString()).AlignCenter();
-                                table.Cell().Element(DataCell).Text(memberName);
-                                table.Cell().Element(DataCell).Text(gender);
-                                idx++;
-                            }
-                        });
+                        col.Item().PaddingTop(10).Text("Padrinhos/Madrinhas")
+                            .FontSize(11).SemiBold();
+                        
+                        RenderMembersTable(col.Item(), padrinhos);
                     }
-                });
 
-                page.Footer().AlignCenter()
-                    .Text($"Total: {payload.data.Count} participantes")
-                    .FontSize(8)
-                    .FontColor(Colors.Grey.Darken2);
+                    // ===== TABELA DE RAHAMISTAS MULHERES =====
+                    var mulheres = GetArrayValue(family, "mulheres");
+                    if (mulheres.Any())
+                    {
+                        col.Item().PaddingTop(12).Text("Rahamistas Mulheres")
+                            .FontSize(11).SemiBold();
+                        
+                        RenderMembersTable(col.Item(), mulheres);
+                    }
+
+                    // ===== TABELA DE RAHAMISTAS HOMENS =====
+                    var homens = GetArrayValue(family, "homens");
+                    if (homens.Any())
+                    {
+                        col.Item().PaddingTop(12).Text("Rahamistas Homens")
+                            .FontSize(11).SemiBold();
+                        
+                        RenderMembersTable(col.Item(), homens);
+                    }
+
+                    // Resumo da família
+                    col.Item().PaddingTop(8).Text($"{totalMembers} membros • {shirtSummary}")
+                        .FontSize(8)
+                        .FontColor(Colors.Grey.Darken2);
+                }
+                col.Item().PaddingTop(20).AlignCenter()
+                    .Text($"Total: {GetSummaryValue(payload.summary, "totalParticipants")} participantes em {GetSummaryValue(payload.summary, "totalFamilies")} famílias")
+                    .FontSize(10)
+                    .SemiBold()
+                    .FontColor(Colors.Grey.Darken1);
             });
-        }).GeneratePdf();
+        });
+    }).GeneratePdf();
 
-        var fileName = $"{name}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
-        return ("application/pdf", fileName, pdfBytes);
+    var fileName = $"Familias_{retreatName}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+    return ("application/pdf", fileName, pdfBytes);
+}
+
+private static void RenderMembersTable(IContainer container, List<IDictionary<string, object?>> members)
+{
+    container.PaddingTop(5).Table(table =>
+    {
+        table.ColumnsDefinition(columns =>
+        {
+            columns.ConstantColumn(25);  // #
+            columns.RelativeColumn(3);   // Nome
+            columns.ConstantColumn(35);  // Idade
+            columns.ConstantColumn(40);  // Peso
+            columns.ConstantColumn(45);  // Altura
+            columns.ConstantColumn(40);  // Camiseta
+            columns.RelativeColumn(2);   // Cidade
+            columns.RelativeColumn(1);   // Pagamento
+        });
+
+        table.Header(header =>
+        {
+            header.Cell().Element(HeaderStyle).Text("#");
+            header.Cell().Element(HeaderStyle).Text("Nome");
+            header.Cell().Element(HeaderStyle).Text("Idade");
+            header.Cell().Element(HeaderStyle).Text("Peso");
+            header.Cell().Element(HeaderStyle).Text("Altura");
+            header.Cell().Element(HeaderStyle).Text("Tam");
+            header.Cell().Element(HeaderStyle).Text("Cidade");
+            header.Cell().Element(HeaderStyle).Text("Pgto");
+        });
+
+        foreach (var member in members)
+        {
+            table.Cell().Element(DataCell).Text(GetIntValue(member, "index").ToString()).AlignCenter();
+            table.Cell().Element(DataCell).Text(GetStringValue(member, "name"));
+            table.Cell().Element(DataCell).Text(GetIntValue(member, "idade").ToString()).AlignCenter();
+            table.Cell().Element(DataCell).Text(GetStringValue(member, "peso")).AlignCenter();
+            table.Cell().Element(DataCell).Text(GetStringValue(member, "altura")).AlignCenter();
+            table.Cell().Element(DataCell).Text(GetStringValue(member, "shirtSize")).AlignCenter();
+            table.Cell().Element(DataCell).Text(GetStringValue(member, "city"));
+            table.Cell().Element(DataCell).Text(GetStringValue(member, "paymentStatus")).FontSize(7).AlignCenter();
+        }
+    });
+}
+
+private static List<IDictionary<string, object?>> GetArrayValue(IDictionary<string, object?> dict, string key)
+{
+    if (dict.TryGetValue(key, out var value) && value is IEnumerable<object> enumerable)
+    {
+        return enumerable
+            .Cast<IDictionary<string, object?>>()
+            .ToList();
     }
+    return new List<IDictionary<string, object?>>();
+}
+
+private static int GetIntValue(IDictionary<string, object?> dict, string key, int defaultValue = 0)
+{
+    if (dict.TryGetValue(key, out var value))
+    {
+        return value switch
+        {
+            int i => i,
+            long l => (int)l,
+            string s when int.TryParse(s, out var result) => result,
+            _ => defaultValue
+        };
+    }
+    return defaultValue;
+}
+
+private static string GetSummaryValue(IDictionary<string, object?>? summary, string key)
+{
+    if (summary?.TryGetValue(key, out var value) == true)
+        return value?.ToString() ?? "0";
+    return "0";
+}
+
+
 
     // ========== PDF CUSTOMIZADO: Check-in Bota Fora ==========
     private static (string ContentType, string FileName, byte[] Bytes) ExportPdfCheckInBotaFora(

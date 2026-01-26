@@ -31,6 +31,7 @@ using SAMGestor.Infrastructure.Repositories.User;
 using SAMGestor.Infrastructure.Services;
 using SAMGestor.Infrastructure.Services.Reports;
 using SAMGestor.Infrastructure.UnitOfWork;
+using ReportTemplateRegistry = SAMGestor.Infrastructure.Services.ReportTemplateRegistry;
 
 namespace SAMGestor.Infrastructure.Extensions;
 
@@ -71,6 +72,33 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFamilyMemberRepository, FamilyMemberRepository>();
 
         services.AddScoped<ServiceSpacesSeeder>();
+        
+        services.AddScoped<IReportTemplateRegistry, ReportTemplateRegistry>();
+        services.AddScoped<RahamistasPerFamiliaTemplate>();
+        services.AddScoped<IReportTemplate, RahamistasPerFamiliaTemplate>(sp => 
+            sp.GetRequiredService<RahamistasPerFamiliaTemplate>());
+        services.AddScoped<ContemplatedParticipantsTemplate>();
+        services.AddScoped<IReportTemplate, ContemplatedParticipantsTemplate>(sp => 
+            sp.GetRequiredService<ContemplatedParticipantsTemplate>());
+        services.AddScoped<ShirtsBySizeTemplate>();
+        services.AddScoped<IReportTemplate, ShirtsBySizeTemplate>(sp => 
+            sp.GetRequiredService<ShirtsBySizeTemplate>());
+        services.AddScoped<PeopleEpitaphTemplate>();
+        services.AddScoped<IReportTemplate, PeopleEpitaphTemplate>(sp => 
+            sp.GetRequiredService<PeopleEpitaphTemplate>());
+        services.AddScoped<TentsAllocationTemplate>();
+        services.AddScoped<IReportTemplate, TentsAllocationTemplate>(sp => sp.GetRequiredService<TentsAllocationTemplate>());
+        services.AddScoped<CheckInBotaForaTemplate>();
+        services.AddScoped<IReportTemplate, CheckInBotaForaTemplate>(sp => sp.GetRequiredService<CheckInBotaForaTemplate>());
+        services.AddScoped<WellnessPerFamilyTemplate>();
+        services.AddScoped<IReportTemplate, WellnessPerFamilyTemplate>(sp => sp.GetRequiredService<WellnessPerFamilyTemplate>());
+        services.AddScoped<ParticipantIndividualCardTemplate>();
+        services.AddScoped<IReportTemplate, ParticipantIndividualCardTemplate>(sp => sp.GetRequiredService<ParticipantIndividualCardTemplate>());
+        services.AddScoped<TapeNamesTemplate>();
+        services.AddScoped<IReportTemplate, TapeNamesTemplate>(sp => sp.GetRequiredService<TapeNamesTemplate>());
+        services.AddScoped<BagsDistributionTemplate>();
+        services.AddScoped<IReportTemplate, BagsDistributionTemplate>(sp => sp.GetRequiredService<BagsDistributionTemplate>());
+
 
         services.AddMediatR(typeof(CreateRetreatHandler).Assembly);
         services.AddValidatorsFromAssemblyContaining<CreateRetreatValidator>();
@@ -101,18 +129,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJwtTokenDecoder, JwtTokenDecoder>();
         services.AddScoped<IRawSqlExecutor, RawSqlExecutor>();
         services.AddScoped<IManualPaymentProofRepository, ManualPaymentProofRepository>();
-        services.AddScoped<RahamistasPerFamiliaTemplate>();
-        services.AddScoped<IReportTemplate, RahamistasPerFamiliaTemplate>(sp => 
-            sp.GetRequiredService<RahamistasPerFamiliaTemplate>());
-        services.AddScoped<ContemplatedParticipantsTemplate>();
-        services.AddScoped<IReportTemplate, ContemplatedParticipantsTemplate>(sp => 
-            sp.GetRequiredService<ContemplatedParticipantsTemplate>());
-        services.AddScoped<ShirtsBySizeTemplate>();
-        services.AddScoped<IReportTemplate, ShirtsBySizeTemplate>(sp => 
-            sp.GetRequiredService<ShirtsBySizeTemplate>());
-        services.AddScoped<PeopleEpitaphTemplate>();
-        services.AddScoped<IReportTemplate, PeopleEpitaphTemplate>(sp => 
-            sp.GetRequiredService<PeopleEpitaphTemplate>());
+      
 
        
 

@@ -20,14 +20,14 @@ public sealed class GenerateReportHandler
     }
 
     public async Task<ReportPayload> Handle(
-        GenerateReportQuery query, 
+        GenerateReportQuery query,
         CancellationToken ct)
     {
-    
+
         var retreat = await _retreatRepository.GetByIdAsync(query.RetreatId);
         if (retreat == null)
             throw new KeyNotFoundException($"Retiro {query.RetreatId} não encontrado.");
-        
+
         var template = _registry.GetTemplate(query.TemplateKey);
         if (template == null)
             throw new KeyNotFoundException($"Template '{query.TemplateKey}' não encontrado.");
@@ -39,9 +39,12 @@ public sealed class GenerateReportHandler
             Page: query.Page,
             PageSize: query.PageSize
         );
-        
-        var payload = await template.GetDataAsync(context, query.Page, query.PageSize, ct);
+
+
+        var skip = (query.Page - 1) * query.PageSize;
+        var payload = await template.GetDataAsync(context, skip, query.PageSize, ct);
 
         return payload;
     }
+
 }
