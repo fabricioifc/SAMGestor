@@ -6,8 +6,8 @@ namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
 /// Relatório completo de participantes contemplados com foto, dados pessoais e status.
+/// Agora traz TODOS os status: Selected, PendingPayment, PaymentConfirmed, Confirmed, Canceled
 /// </summary>
-
 public sealed class ContemplatedParticipantsTemplate : IReportTemplate
 {
     public string Key => "contemplated-participants";
@@ -29,10 +29,15 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
 
+        
         var registrations = await _readDb.ToListAsync(
             _readDb.Registrations
                 .Where(r => r.RetreatId == retreatId && 
-                           r.Status == RegistrationStatus.Selected)
+                           (r.Status == RegistrationStatus.Selected ||
+                            r.Status == RegistrationStatus.PendingPayment ||
+                            r.Status == RegistrationStatus.PaymentConfirmed ||
+                            r.Status == RegistrationStatus.Confirmed ||
+                            r.Status == RegistrationStatus.Canceled))
                 .Select(r => new {
                     r.Id,
                     Name = r.Name.Value,
@@ -41,6 +46,13 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
                     r.BirthDate,
                     r.City,
                     r.Status,
+                    r.ShirtSize,
+                    r.WeightKg,
+                    r.HeightCm,
+                    r.Profession,
+                    r.InstagramHandle,
+                    r.Religion,
+                    Cpf = r.Cpf.Value,
                     PhotoUrl = r.PhotoUrl != null ? r.PhotoUrl.Value : null,
                     PhotoStorageKey = r.PhotoStorageKey
                 })
@@ -61,15 +73,25 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
             City = r.City ?? "-",
             Status = r.Status,
             StatusLabel = GetStatusLabel(r.Status),
+            ShirtSize = r.ShirtSize?.ToString() ?? "-",
+            Weight = r.WeightKg.HasValue ? $"{r.WeightKg:F1} kg" : "-",
+            Height = r.HeightCm.HasValue ? $"{r.HeightCm:F0} cm" : "-",
+            Profession = r.Profession ?? "-",
+            Instagram = r.InstagramHandle ?? "-",
+            Religion = r.Religion ?? "-",
+            Cpf = r.Cpf,
             PhotoUrl = r.PhotoUrl,
             PhotoStorageKey = r.PhotoStorageKey
         }).ToList();
 
-        var statusCounts = allRows
-            .GroupBy(r => r.Status)
-            .ToDictionary(g => g.Key, g => g.Count());
-
+       
+        var selectedCount = allRows.Count(r => r.Status == RegistrationStatus.Selected);
+        var pendingPaymentCount = selectedCount; 
+        var confirmedCount = allRows.Count(r => r.Status == RegistrationStatus.PaymentConfirmed || 
+                                               r.Status == RegistrationStatus.Confirmed);
+        var canceledCount = allRows.Count(r => r.Status == RegistrationStatus.Canceled);
         var totalRecords = allRows.Count;
+
         var page = take > 0 ? (skip / take) + 1 : 1;
         var pagedRows = take > 0 
             ? allRows.Skip(skip).Take(take).ToList() 
@@ -84,6 +106,13 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
             new ColumnDef("city", "Cidade"),
             new ColumnDef("phone", "Telefone"),
             new ColumnDef("email", "E-mail"),
+            new ColumnDef("shirtSize", "Tamanho Camiseta"),
+            new ColumnDef("weight", "Peso"),
+            new ColumnDef("height", "Altura"),
+            new ColumnDef("profession", "Profissão"),
+            new ColumnDef("instagram", "Instagram"),
+            new ColumnDef("religion", "Religião"),
+            new ColumnDef("cpf", "CPF"),
             new ColumnDef("status", "Status")
         };
 
@@ -97,6 +126,13 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
                 ["city"] = r.City,
                 ["phone"] = r.Phone,
                 ["email"] = r.Email,
+                ["shirtSize"] = r.ShirtSize,
+                ["weight"] = r.Weight,
+                ["height"] = r.Height,
+                ["profession"] = r.Profession,
+                ["instagram"] = r.Instagram,
+                ["religion"] = r.Religion,
+                ["cpf"] = r.Cpf,
                 ["status"] = r.StatusLabel
             })
             .ToList();
@@ -113,11 +149,10 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
         var summary = new Dictionary<string, object?>
         {
             ["totalParticipants"] = totalRecords,
-            ["selected"] = statusCounts.GetValueOrDefault(RegistrationStatus.Selected, 0),
-            ["pendingPayment"] = statusCounts.GetValueOrDefault(RegistrationStatus.PendingPayment, 0),
-            ["paymentConfirmed"] = statusCounts.GetValueOrDefault(RegistrationStatus.PaymentConfirmed, 0),
-            ["confirmed"] = statusCounts.GetValueOrDefault(RegistrationStatus.Confirmed, 0),
-            ["canceled"] = statusCounts.GetValueOrDefault(RegistrationStatus.Canceled, 0)
+            ["selected"] = selectedCount,
+            ["pendingPayment"] = pendingPaymentCount,
+            ["confirmed"] = confirmedCount,
+            ["canceled"] = canceledCount
         };
 
         return new ReportPayload(header, columns, data, summary, totalRecords, page, take);
@@ -185,6 +220,13 @@ public sealed class ContemplatedParticipantsTemplate : IReportTemplate
         public string City { get; set; } = string.Empty;
         public RegistrationStatus Status { get; set; }
         public string StatusLabel { get; set; } = string.Empty;
+        public string ShirtSize { get; set; } = string.Empty;
+        public string Weight { get; set; } = string.Empty;
+        public string Height { get; set; } = string.Empty;
+        public string Profession { get; set; } = string.Empty;
+        public string Instagram { get; set; } = string.Empty;
+        public string Religion { get; set; } = string.Empty;
+        public string Cpf { get; set; } = string.Empty;
         public string? PhotoUrl { get; set; }
         public string? PhotoStorageKey { get; set; }
     }

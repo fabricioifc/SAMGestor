@@ -6,9 +6,9 @@ namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
 /// Relatório de Lápides para atividade do retiro.
-/// Exibe foto, nome, data de nascimento, cidade e família dos contemplados pagos.
+/// Exibe foto, nome, data de nascimento, cidade e família dos confirmados.
+/// Filtro: PaymentConfirmed e Confirmed apenas.
 /// </summary>
-
 public sealed class PeopleEpitaphTemplate : IReportTemplate
 {
     public string Key => "people-epitaph";
@@ -33,7 +33,8 @@ public sealed class PeopleEpitaphTemplate : IReportTemplate
         var registrations = await _readDb.ToListAsync(
             _readDb.Registrations
                 .Where(r => r.RetreatId == retreatId && 
-                           r.Status == RegistrationStatus.Selected)
+                            (r.Status == RegistrationStatus.Confirmed ||
+                             r.Status == RegistrationStatus.PaymentConfirmed))
                 .Select(r => new {
                     r.Id,
                     Name = r.Name.Value,
@@ -50,14 +51,6 @@ public sealed class PeopleEpitaphTemplate : IReportTemplate
         }
 
         var registrationIds = registrations.Select(r => r.Id).ToList();
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => registrationIds.Contains(p.RegistrationId) && 
-                           p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
-            ct);
-
-        var paidSet = paidRegistrationIds.ToHashSet();
 
         var familyMembers = await _readDb.ToListAsync(
             _readDb.FamilyMembers
@@ -76,7 +69,6 @@ public sealed class PeopleEpitaphTemplate : IReportTemplate
         var memberFamilyDict = familyMembers.ToDictionary(fm => fm.RegistrationId, fm => fm.FamilyId);
 
         var allRows = registrations
-            .Where(r => paidSet.Contains(r.Id))
             .Select(r =>
             {
                 var hasFamilyId = memberFamilyDict.TryGetValue(r.Id, out var familyId);
@@ -93,12 +85,13 @@ public sealed class PeopleEpitaphTemplate : IReportTemplate
                     PhotoStorageKey = r.PhotoStorageKey,
                     FamilyName = family?.Name,
                     FamilyColor = family?.Color,
-                    FamilyOrder = family?.Name ?? "ZZZ_SEM_FAMILIA"
+                    FamilyOrder = ExtractFamilyOrderKey(family?.Name ?? "ZZZ_SEM_FAMILIA")
                 };
             })
             .OrderBy(r => r.FamilyOrder)
             .ThenBy(r => r.Name)
             .ToList();
+        
         
         var totalRecords = allRows.Count;
         var page = take > 0 ? (skip / take) + 1 : 1;
@@ -164,7 +157,7 @@ public sealed class PeopleEpitaphTemplate : IReportTemplate
         var columns = new[] { new ColumnDef("message", "Mensagem") };
         var data = new List<IDictionary<string, object?>>
         {
-            new Dictionary<string, object?> { ["message"] = "Nenhum participante contemplado encontrado" }
+            new Dictionary<string, object?> { ["message"] = "Nenhum participante confirmado encontrado" }
         };
 
         return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
@@ -180,5 +173,14 @@ public sealed class PeopleEpitaphTemplate : IReportTemplate
         public string? FamilyName { get; set; }
         public string? FamilyColor { get; set; }
         public string FamilyOrder { get; set; } = string.Empty;
+    }
+    private static string ExtractFamilyOrderKey(string familyName)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(familyName, @"(\d+)");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var number))
+        {
+            return $"A{number:D3}"; 
+        }
+        return $"B{familyName}";
     }
 }

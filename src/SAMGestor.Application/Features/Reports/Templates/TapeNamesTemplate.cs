@@ -5,10 +5,9 @@ using SAMGestor.Domain.Enums;
 namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
-/// Relatório "Fitas" - Lista simples de nomes dos participantes confirmados e pagos.
+/// Relatório "Fitas" - Lista simples de nomes dos participantes confirmados.
 /// Usado para gerar fitas/listas com nomes dos participantes.
 /// </summary>
-
 public sealed class TapeNamesTemplate : IReportTemplate
 {
     public string Key => "tape-names";
@@ -30,26 +29,19 @@ public sealed class TapeNamesTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
 
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
+        // FILTRO: Confirmed e PaymentConfirmed
+        var registrations = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => r.RetreatId == retreatId &&
+                           (r.Status == RegistrationStatus.Confirmed ||
+                            r.Status == RegistrationStatus.PaymentConfirmed))
+                .OrderBy(r => r.Name.Value)
+                .Select(r => new
+                {
+                    r.Id,
+                    Name = r.Name.Value
+                }),
             ct);
-
-        var paidSet = paidRegistrationIds.ToHashSet();
-
-        var registrationsQuery = _readDb.Registrations
-            .Where(r => r.RetreatId == retreatId &&
-                       r.Status == RegistrationStatus.Confirmed &&
-                       paidSet.Contains(r.Id))
-            .OrderBy(r => r.Name.Value)
-            .Select(r => new
-            {
-                r.Id,
-                Name = r.Name.Value
-            });
-
-        var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
 
         if (!registrations.Any())
             return CreateEmptyPayload(ctx);
@@ -99,7 +91,7 @@ public sealed class TapeNamesTemplate : IReportTemplate
         var columns = new[] { new ColumnDef("message", "Mensagem") };
         var data = new List<IDictionary<string, object?>>
         {
-            new Dictionary<string, object?> { ["message"] = "Nenhum participante confirmado e pago encontrado" }
+            new Dictionary<string, object?> { ["message"] = "Nenhum participante confirmado encontrado" }
         };
 
         return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
