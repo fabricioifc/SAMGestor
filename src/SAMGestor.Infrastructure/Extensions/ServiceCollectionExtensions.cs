@@ -92,8 +92,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReportTemplate, CheckInBotaForaTemplate>(sp => sp.GetRequiredService<CheckInBotaForaTemplate>());
         services.AddScoped<WellnessPerFamilyTemplate>();
         services.AddScoped<IReportTemplate, WellnessPerFamilyTemplate>(sp => sp.GetRequiredService<WellnessPerFamilyTemplate>());
-        services.AddScoped<ParticipantIndividualCardTemplate>();
-        services.AddScoped<IReportTemplate, ParticipantIndividualCardTemplate>(sp => sp.GetRequiredService<ParticipantIndividualCardTemplate>());
+        services.AddScoped<CartaFiveMinutesTemplate>();
+        services.AddScoped<IReportTemplate, CartaFiveMinutesTemplate>(sp => sp.GetRequiredService<CartaFiveMinutesTemplate>());
         services.AddScoped<TapeNamesTemplate>();
         services.AddScoped<IReportTemplate, TapeNamesTemplate>(sp => sp.GetRequiredService<TapeNamesTemplate>());
         services.AddScoped<BagsDistributionTemplate>();
