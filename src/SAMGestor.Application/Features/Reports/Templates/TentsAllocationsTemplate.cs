@@ -1,5 +1,3 @@
-// Application/Reports/Templates/TentsAllocationTemplate.cs
-
 using SAMGestor.Application.Dtos.Reports;
 using SAMGestor.Application.Interfaces.Reports;
 using SAMGestor.Domain.Enums;
@@ -7,7 +5,7 @@ using SAMGestor.Domain.Enums;
 namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
-/// Relatório de alocação de barracas com participantes pagos.
+/// Relatório de alocação de barracas com participantes confirmados e pagos.
 /// Agrupa por barraca e lista rahamistas, madrinhas e padrinhos.
 /// Exibe família com cor para melhor visualização.
 /// </summary>
@@ -51,25 +49,10 @@ public sealed class TentsAllocationTemplate : IReportTemplate
 
         var tentIds = tents.Select(t => t.Id).ToList();
 
-        var paymentsQuery = _readDb.Payments
-            .Where(p => p.Status == PaymentStatus.Paid)
-            .Select(p => p.RegistrationId);
-
-        var paidRegistrationIds = await _readDb.ToListAsync(paymentsQuery, ct);
-        var paidSet = paidRegistrationIds.ToHashSet();
-
-        var tentAssignmentsQuery = _readDb.TentAssignments
-            .Where(ta => tentIds.Contains(ta.TentId))
-            .Select(ta => new { ta.TentId, ta.RegistrationId });
-
-        var tentAssignments = await _readDb.ToListAsync(tentAssignmentsQuery, ct);
-
-        var assignedRegistrationIds = tentAssignments.Select(ta => ta.RegistrationId).ToList();
-
         var registrationsQuery = _readDb.Registrations
-            .Where(r => assignedRegistrationIds.Contains(r.Id) &&
-                       r.Status == RegistrationStatus.Confirmed &&
-                       paidSet.Contains(r.Id))
+            .Where(r => r.RetreatId == retreatId &&
+                       (r.Status == RegistrationStatus.Confirmed ||
+                        r.Status == RegistrationStatus.PaymentConfirmed))
             .Select(r => new
             {
                 r.Id,
@@ -79,6 +62,13 @@ public sealed class TentsAllocationTemplate : IReportTemplate
 
         var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
         var regById = registrations.ToDictionary(r => r.Id);
+
+        var tentAssignmentsQuery = _readDb.TentAssignments
+            .Where(ta => tentIds.Contains(ta.TentId))
+            .Select(ta => new { ta.TentId, ta.RegistrationId });
+
+        var tentAssignments = await _readDb.ToListAsync(tentAssignmentsQuery, ct);
+        var assignedRegistrationIds = tentAssignments.Select(ta => ta.RegistrationId).ToList();
 
         var familyMembersQuery = _readDb.FamilyMembers
             .Where(fm => assignedRegistrationIds.Contains(fm.RegistrationId))
@@ -91,9 +81,8 @@ public sealed class TentsAllocationTemplate : IReportTemplate
             });
 
         var familyMembers = await _readDb.ToListAsync(familyMembersQuery, ct);
-
         var familyIds = familyMembers.Select(fm => fm.FamilyId).Distinct().ToList();
-
+        
         var familiesQuery = _readDb.Families
             .Where(f => familyIds.Contains(f.Id))
             .Select(f => new
@@ -107,7 +96,7 @@ public sealed class TentsAllocationTemplate : IReportTemplate
 
         var familyDict = families.ToDictionary(f => f.Id);
         var memberDict = familyMembers.ToDictionary(fm => fm.RegistrationId);
-        
+
         var allocationsData = new List<TentAllocationRow>();
 
         foreach (var tent in tents)
@@ -146,58 +135,61 @@ public sealed class TentsAllocationTemplate : IReportTemplate
                     {
                         RegistrationId = ta.RegistrationId,
                         Name = reg.Name,
-                        Gender = reg.Gender.ToString().Substring(0, 1), // M/F
-                        FamilyName = family?.Name,
+                        Gender = reg.Gender.ToString().Substring(0, 1),
+                        FamilyName = family?.Name ?? "Sem Família",
                         FamilyColor = family?.Color ?? "#CCCCCC",
                         Role = roleLabel,
                         RoleOrder = roleOrder
                     };
                 })
                 .Where(p => p != null)
-                .OrderBy(p => p!.RoleOrder) // Rahamistas primeiro
-                .ThenBy(p => p!.FamilyName ?? "ZZZ")
-                .ThenBy(p => p!.Name)
+                .OrderBy(p => p!.RoleOrder)
+                .ThenBy(p => p!.FamilyName)          
+                .ThenBy(p => p!.Name)               
                 .ToList();
 
-            allocationsData.Add(new TentAllocationRow
+            if (tentParticipants.Any())
             {
-                TentNumber = tent.Number,
-                TentCapacity = tent.Capacity,
-                TentCategory = tent.Category.ToString(),
-                ParticipantCount = tentParticipants.Count,
-                Participants = tentParticipants!
-            });
+                allocationsData.Add(new TentAllocationRow
+                {
+                    TentNumber = tent.Number,
+                    TentCapacity = tent.Capacity,
+                    TentCategory = tent.Category.ToString(),
+                    ParticipantCount = tentParticipants.Count,
+                    Participants = tentParticipants!
+                });
+            }
         }
 
         var columns = new[]
         {
             new ColumnDef("tentNumber", "Barraca"),
+            new ColumnDef("tentCategory", "Tipo"),
             new ColumnDef("participantName", "Nome"),
+            new ColumnDef("gender", "Sexo"),
             new ColumnDef("role", "Função"),
             new ColumnDef("familyName", "Família"),
-            new ColumnDef("familyColor", "Cor Família"),
-            new ColumnDef("gender", "Sexo")
+            new ColumnDef("familyColor", "Cor")
         };
 
         var data = new List<IDictionary<string, object?>>();
 
         foreach (var tent in allocationsData)
         {
-            var isFirstInTent = true;
+           
 
             foreach (var participant in tent.Participants)
             {
                 data.Add(new Dictionary<string, object?>
                 {
-                    ["tentNumber"] = isFirstInTent ? $"#{tent.TentNumber}" : "",
+                    ["tentNumber"] = $"#{tent.TentNumber}",  
+                    ["tentCategory"] = tent.TentCategory,   
                     ["participantName"] = participant.Name,
+                    ["gender"] = participant.Gender,
                     ["role"] = participant.Role,
-                    ["familyName"] = participant.FamilyName ?? "Sem Família",
-                    ["familyColor"] = participant.FamilyColor,
-                    ["gender"] = participant.Gender
+                    ["familyName"] = participant.FamilyName,
+                    ["familyColor"] = participant.FamilyColor
                 });
-
-                isFirstInTent = false;
             }
         }
 
@@ -242,7 +234,7 @@ public sealed class TentsAllocationTemplate : IReportTemplate
 
         return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
     }
-    
+
     private class TentAllocationRow
     {
         public int TentNumber { get; set; }
@@ -257,7 +249,7 @@ public sealed class TentsAllocationTemplate : IReportTemplate
         public Guid RegistrationId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Gender { get; set; } = string.Empty;
-        public string? FamilyName { get; set; }
+        public string FamilyName { get; set; } = string.Empty;
         public string FamilyColor { get; set; } = "#CCCCCC";
         public string Role { get; set; } = string.Empty;
         public int RoleOrder { get; set; }

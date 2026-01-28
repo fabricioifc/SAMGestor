@@ -30,32 +30,23 @@ public sealed class BagsDistributionTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
 
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
+        var validStatuses = new[] { RegistrationStatus.Confirmed, RegistrationStatus.PaymentConfirmed };
+        
+        var registrationsFromDb = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => r.RetreatId == retreatId && validStatuses.Contains(r.Status)),
             ct);
 
-        var paidSet = paidRegistrationIds.ToHashSet();
+        var registrations = registrationsFromDb
+            .Select(r => new ParticipantRow(r.Id, r.Name.Value))
+            .ToList();
 
-        var registrationsQuery = _readDb.Registrations
-            .Where(r => r.RetreatId == retreatId &&
-                       r.Status == RegistrationStatus.Confirmed &&
-                       paidSet.Contains(r.Id))
-            .Select(r => new
-            {
-                r.Id,
-                Name = r.Name.Value
-            });
-
-        var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
-
-        if (!registrations.Any())
+        if (registrations.Count == 0)
             return CreateEmptyPayload(ctx);
 
         var random = new Random(DateTime.Now.Millisecond);
         var shuffled = registrations.OrderBy(_ => random.Next()).ToList();
-        
+
         var columnA = new List<string>();
         var columnB = new List<string>();
 
@@ -71,8 +62,8 @@ public sealed class BagsDistributionTemplate : IReportTemplate
 
         var columns = new[]
         {
-            new ColumnDef("columnA", "A"),
-            new ColumnDef("columnB", "B")
+            new ColumnDef("columnA", "Grupo A"),
+            new ColumnDef("columnB", "Grupo B")
         };
 
         var data = new List<IDictionary<string, object?>>();
@@ -122,6 +113,15 @@ public sealed class BagsDistributionTemplate : IReportTemplate
             new Dictionary<string, object?> { ["message"] = "Nenhum participante encontrado" }
         };
 
-        return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
+        var summary = new Dictionary<string, object?>
+        {
+            ["totalParticipants"] = 0,
+            ["columnACount"] = 0,
+            ["columnBCount"] = 0
+        };
+
+        return new ReportPayload(header, columns, data, summary, 0, 1, 0);
     }
+
+    private sealed record ParticipantRow(Guid Id, string Name);
 }

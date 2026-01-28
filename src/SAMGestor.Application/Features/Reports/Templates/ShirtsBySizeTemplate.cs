@@ -5,7 +5,7 @@ using SAMGestor.Domain.Enums;
 namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
-/// Relatório de contagem de camisetas por tamanho dos contemplados pagos.
+/// Relatório de contagem de camisetas por tamanho dos participantes confirmados.
 /// </summary>
 
 public sealed class ShirtsBySizeTemplate : IReportTemplate
@@ -29,43 +29,38 @@ public sealed class ShirtsBySizeTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
         
-        var registrations = await _readDb.ToListAsync(
+        var registrationsFromDb = await _readDb.ToListAsync(
             _readDb.Registrations
                 .Where(r => r.RetreatId == retreatId && 
-                           r.Status == RegistrationStatus.Selected &&
-                           r.ShirtSize.HasValue)
-                .Select(r => new { r.Id, r.ShirtSize }),
+                            (r.Status == RegistrationStatus.Confirmed || r.Status == RegistrationStatus.PaymentConfirmed) &&
+                            r.ShirtSize.HasValue),
             ct);
         
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
-            ct);
-
-        var paidSet = paidRegistrationIds.ToHashSet();
-        
-        var sizes = registrations
-            .Where(r => paidSet.Contains(r.Id) && r.ShirtSize.HasValue)
-            .Select(r => r.ShirtSize!.Value)
+        var registrations = registrationsFromDb
+            .Select(r => new RegistrationRow(r.Id, r.ShirtSize!.Value))
             .ToList();
         
-        var grouped = sizes
-            .GroupBy(s => s)
-            .Select(g => new { Size = g.Key, Count = g.Count() })
+        if (registrations.Count == 0)
+            return CreateEmptyPayload(ctx);
+      
+        var grouped = registrations
+            .GroupBy(r => r.ShirtSize)
+            .Select(g => new ShirtSizeGroup(g.Key, g.Count()))
             .OrderBy(x => x.Size)
             .ToList();
-        
+       
         var columns = new[]
         {
-            new ColumnDef("size", "Tamanho de Camiseta"),
+            new ColumnDef("size", "Tamanho"),
+            new ColumnDef("sizeLabel", "Descrição"),
             new ColumnDef("count", "Quantidade")
         };
 
         var data = grouped
             .Select(x => (IDictionary<string, object?>)new Dictionary<string, object?>
             {
-                ["size"] = MapSizeLabel(x.Size),
+                ["size"] = (int)x.Size,
+                ["sizeLabel"] = MapSizeLabel(x.Size),
                 ["count"] = x.Count
             })
             .ToList();
@@ -79,25 +74,59 @@ public sealed class ShirtsBySizeTemplate : IReportTemplate
             RetreatName: ctx.RetreatName
         );
 
+        var totalShirts = grouped.Sum(g => g.Count);
+
         var summary = new Dictionary<string, object?>
         {
-            ["totalParticipants"] = sizes.Count,
-            ["totalShirts"] = sizes.Count
+            ["totalParticipants"] = registrations.Count,
+            ["totalShirts"] = totalShirts,
+            ["uniqueSizes"] = grouped.Count
         };
 
         return new ReportPayload(header, columns, data, summary, data.Count, 1, 0);
     }
 
+    private ReportPayload CreateEmptyPayload(ReportContext ctx)
+    {
+        var header = new ReportHeader(
+            TemplateKey: Key,
+            Title: DefaultTitle,
+            Category: "Logística",
+            GeneratedAt: DateTime.UtcNow,
+            RetreatId: ctx.RetreatId,
+            RetreatName: ctx.RetreatName
+        );
+
+        var columns = new[] { new ColumnDef("message", "Mensagem") };
+        var data = new List<IDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["message"] = "Nenhuma camiseta encontrada" }
+        };
+
+        var summary = new Dictionary<string, object?>
+        {
+            ["totalParticipants"] = 0,
+            ["totalShirts"] = 0,
+            ["uniqueSizes"] = 0
+        };
+
+        return new ReportPayload(header, columns, data, summary, 0, 1, 0);
+    }
+
     private static string MapSizeLabel(ShirtSize size) => size switch
     {
-        ShirtSize.P => "P",
-        ShirtSize.M => "M",
-        ShirtSize.G => "G",
-        ShirtSize.GG => "GG",
-        ShirtSize.GG1 => "GG1",
-        ShirtSize.GG2 => "GG2",
-        ShirtSize.GG3 => "GG3",
-        ShirtSize.GG4 => "GG4",
+        ShirtSize.P => "P - Pequeno",
+        ShirtSize.M => "M - Médio",
+        ShirtSize.G => "G - Grande",
+        ShirtSize.GG => "GG - Extra Grande",
+        ShirtSize.GG1 => "GG1 - Extra Grande 1",
+        ShirtSize.GG2 => "GG2 - Extra Grande 2",
+        ShirtSize.GG3 => "GG3 - Extra Grande 3",
+        ShirtSize.GG4 => "GG4 - Extra Grande 4",
         _ => "Não definido"
     };
+    
+    private sealed record RegistrationRow(Guid Id, ShirtSize ShirtSize);
+
+    private sealed record ShirtSizeGroup(ShirtSize Size, int Count);
 }
