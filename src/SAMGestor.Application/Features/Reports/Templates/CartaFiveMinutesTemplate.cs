@@ -5,18 +5,17 @@ using SAMGestor.Domain.Enums;
 namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
-/// Ficha Individual: Uma página por participante com nome no topo (colorido pela família)
-/// e espaço em branco para anotações durante o retiro.
+/// Carta 5 Minutos: Uma página por participante (Confirmados + PaymentConfirmed).
+/// Topo com nome e cor da família, resto em branco para anotações.
 /// </summary>
-
-public sealed class ParticipantIndividualCardTemplate : IReportTemplate
+public sealed class CartaFiveMinutesTemplate : IReportTemplate
 {
-    public string Key => "participant-individual-card";
-    public string DefaultTitle => "Ficha Individual do Participante";
+    public string Key => "carta-five-minutes";
+    public string DefaultTitle => "Carta 5 Minutos";
 
     private readonly IReportingReadDb _readDb;
 
-    public ParticipantIndividualCardTemplate(IReportingReadDb readDb)
+    public CartaFiveMinutesTemplate(IReportingReadDb readDb)
         => _readDb = readDb;
 
     public async Task<ReportPayload> GetDataAsync(
@@ -30,50 +29,42 @@ public sealed class ParticipantIndividualCardTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
 
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
+        var registrations = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => r.RetreatId == retreatId &&
+                           (r.Status == RegistrationStatus.Confirmed ||
+                            r.Status == RegistrationStatus.PaymentConfirmed))
+                .OrderBy(r => r.Name.Value)
+                .Select(r => new
+                {
+                    r.Id,
+                    Name = r.Name.Value
+                }),
             ct);
-
-        var paidSet = paidRegistrationIds.ToHashSet();
-
-        var registrationsQuery = _readDb.Registrations
-            .Where(r => r.RetreatId == retreatId &&
-                       r.Status == RegistrationStatus.Confirmed &&
-                       paidSet.Contains(r.Id))
-            .OrderBy(r => r.Name.Value)
-            .Select(r => new
-            {
-                r.Id,
-                Name = r.Name.Value
-            });
-
-        var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
 
         if (!registrations.Any())
             return CreateEmptyPayload(ctx);
 
         var registrationIds = registrations.Select(r => r.Id).ToList();
         
-        var familyMembersQuery = _readDb.FamilyMembers
-            .Where(fm => registrationIds.Contains(fm.RegistrationId))
-            .Select(fm => new { fm.FamilyId, fm.RegistrationId });
-
-        var familyMembers = await _readDb.ToListAsync(familyMembersQuery, ct);
+        var familyMembers = await _readDb.ToListAsync(
+            _readDb.FamilyMembers
+                .Where(fm => registrationIds.Contains(fm.RegistrationId))
+                .Select(fm => new { fm.FamilyId, fm.RegistrationId }),
+            ct);
 
         var familyIds = familyMembers.Select(fm => fm.FamilyId).Distinct().ToList();
 
-        var familiesQuery = _readDb.Families
-            .Where(f => familyIds.Contains(f.Id))
-            .Select(f => new
-            {
-                f.Id,
-                Name = f.Name.Value,
-                Color = f.Color.HexCode
-            });
-
-        var families = await _readDb.ToListAsync(familiesQuery, ct);
+        var families = await _readDb.ToListAsync(
+            _readDb.Families
+                .Where(f => familyIds.Contains(f.Id))
+                .Select(f => new
+                {
+                    f.Id,
+                    Name = f.Name.Value,
+                    Color = f.Color.HexCode
+                }),
+            ct);
 
         var familyDict = families.ToDictionary(f => f.Id);
         var memberDict = familyMembers.ToDictionary(fm => fm.RegistrationId, fm => fm.FamilyId);
@@ -132,7 +123,7 @@ public sealed class ParticipantIndividualCardTemplate : IReportTemplate
         var columns = new[] { new ColumnDef("message", "Mensagem") };
         var data = new List<IDictionary<string, object?>>
         {
-            new Dictionary<string, object?> { ["message"] = "Nenhum participante encontrado" }
+            new Dictionary<string, object?> { ["message"] = "Nenhum participante confirmado encontrado" }
         };
 
         return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
