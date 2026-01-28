@@ -7,7 +7,7 @@ namespace SAMGestor.Application.Features.Reports.Templates;
 /// <summary>
 /// Relatório de Check-in "Bota Fora x Rahamivida"
 /// Usado na chegada do retiro para marcar itens recebidos/entregues.
-/// Participantes confirmados e pagos, divididos em 4 tabelas por faixa alfabética.
+/// Participantes confirmados, divididos em 4 tabelas por faixa alfabética (A-D, E-H, I-L, M-Z).
 /// </summary>
 
 public sealed class CheckInBotaForaTemplate : IReportTemplate
@@ -31,32 +31,22 @@ public sealed class CheckInBotaForaTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
 
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
+        var validStatuses = new[] { RegistrationStatus.Confirmed, RegistrationStatus.PaymentConfirmed };
+        
+        var registrationsFromDb = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => r.RetreatId == retreatId && validStatuses.Contains(r.Status))
+                .OrderBy(r => r.Name.Value),
             ct);
 
-        var paidSet = paidRegistrationIds.ToHashSet();
-        
-        var registrationsQuery = _readDb.Registrations
-            .Where(r => r.RetreatId == retreatId &&
-                       r.Status == RegistrationStatus.Confirmed &&
-                       paidSet.Contains(r.Id))
-            .OrderBy(r => r.Name.Value)
-            .Select(r => new
-            {
-                r.Id,
-                Name = r.Name.Value
-            });
-
-        var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
-
-        if (!registrations.Any())
+        if (registrationsFromDb.Count == 0)
             return CreateEmptyPayload(ctx);
 
-        // 3. Agrupa por faixa alfabética
-        var faixas = new Dictionary<string, List<CheckInParticipant>>
+        var registrations = registrationsFromDb
+            .Select(r => new ParticipantRow(r.Id, r.Name.Value))
+            .ToList();
+
+        var faixas = new Dictionary<string, List<ParticipantRow>>
         {
             ["A-D"] = new(),
             ["E-H"] = new(),
@@ -68,64 +58,36 @@ public sealed class CheckInBotaForaTemplate : IReportTemplate
         {
             var firstLetter = char.ToUpper(reg.Name.FirstOrDefault());
             var faixa = GetFaixa(firstLetter);
-
-            faixas[faixa].Add(new CheckInParticipant
-            {
-                RegistrationId = reg.Id,
-                Name = reg.Name
-            });
+            faixas[faixa].Add(reg);
         }
-        
+
         var columns = new[]
         {
             new ColumnDef("faixa", "Faixa"),
             new ColumnDef("name", "Nome"),
             new ColumnDef("termo", "Termo"),
             new ColumnDef("celular", "Celular"),
-            new ColumnDef("relogio", "Relogio"),
+            new ColumnDef("relogio", "Relógio"),
             new ColumnDef("remedio", "Remédio"),
             new ColumnDef("carteira", "Carteira"),
             new ColumnDef("bolsaMao", "Bolsa de Mão"),
             new ColumnDef("chave", "Chave"),
-            new ColumnDef("dataNasc", "DataNasc."),
+            new ColumnDef("dataNasc", "Data Nasc"),
             new ColumnDef("assinatura", "Assinatura")
         };
 
         var data = new List<IDictionary<string, object?>>();
 
-        foreach (var (faixaKey, participants) in faixas)
+        foreach (var faixaKey in new[] { "A-D", "E-H", "I-L", "M-Z" })
         {
-            if (!participants.Any())
-                continue;
-
-            var isFirstInFaixa = true;
-
+            var participants = faixas[faixaKey];
+            
             foreach (var participant in participants)
             {
                 data.Add(new Dictionary<string, object?>
                 {
-                    ["faixa"] = isFirstInFaixa ? faixaKey : "",
+                    ["faixa"] = faixaKey,
                     ["name"] = participant.Name,
-                    ["termo"] = "",     
-                    ["celular"] = "",    
-                    ["Relogio"] = "",   
-                    ["remedio"] = "",   
-                    ["carteira"] = "",   
-                    ["bolsaMao"] = "",   
-                    ["chave"] = "",      
-                    ["dataNasc"] = "",   
-                    ["assinatura"] = ""  
-                });
-
-                isFirstInFaixa = false;
-            }
-            
-            if (faixas.Values.Any(f => f.Any()))
-            {
-                data.Add(new Dictionary<string, object?>
-                {
-                    ["faixa"] = "",
-                    ["name"] = "",
                     ["termo"] = "",
                     ["celular"] = "",
                     ["relogio"] = "",
@@ -139,8 +101,6 @@ public sealed class CheckInBotaForaTemplate : IReportTemplate
             }
         }
 
-        var totalParticipants = registrations.Count;
-
         var header = new ReportHeader(
             TemplateKey: Key,
             Title: DefaultTitle,
@@ -152,27 +112,23 @@ public sealed class CheckInBotaForaTemplate : IReportTemplate
 
         var summary = new Dictionary<string, object?>
         {
-            ["totalParticipants"] = totalParticipants,
+            ["totalParticipants"] = registrations.Count,
             ["faixaAD"] = faixas["A-D"].Count,
             ["faixaEH"] = faixas["E-H"].Count,
             ["faixaIL"] = faixas["I-L"].Count,
             ["faixaMZ"] = faixas["M-Z"].Count
         };
 
-        return new ReportPayload(header, columns, data, summary, totalParticipants, 1, 0);
+        return new ReportPayload(header, columns, data, summary, registrations.Count, 1, 0);
     }
 
-    private string GetFaixa(char letter)
+    private static string GetFaixa(char letter) => letter switch
     {
-        return letter switch
-        {
-            >= 'A' and <= 'D' => "A-D",
-            >= 'E' and <= 'H' => "E-H",
-            >= 'I' and <= 'L' => "I-L",
-            >= 'M' and <= 'Z' => "M-Z",
-            _ => "M-Z"
-        };
-    }
+        >= 'A' and <= 'D' => "A-D",
+        >= 'E' and <= 'H' => "E-H",
+        >= 'I' and <= 'L' => "I-L",
+        _ => "M-Z"
+    };
 
     private ReportPayload CreateEmptyPayload(ReportContext ctx)
     {
@@ -188,15 +144,21 @@ public sealed class CheckInBotaForaTemplate : IReportTemplate
         var columns = new[] { new ColumnDef("message", "Mensagem") };
         var data = new List<IDictionary<string, object?>>
         {
-            new Dictionary<string, object?> { ["message"] = "Nenhum participante confirmado e pago encontrado" }
+            new Dictionary<string, object?> { ["message"] = "Nenhum participante confirmado encontrado" }
         };
 
-        return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
+        var summary = new Dictionary<string, object?>
+        {
+            ["totalParticipants"] = 0,
+            ["faixaAD"] = 0,
+            ["faixaEH"] = 0,
+            ["faixaIL"] = 0,
+            ["faixaMZ"] = 0
+        };
+
+        return new ReportPayload(header, columns, data, summary, 0, 1, 0);
     }
 
-    private class CheckInParticipant
-    {
-        public Guid RegistrationId { get; set; }
-        public string Name { get; set; } = string.Empty;
-    }
+    
+    private sealed record ParticipantRow(Guid Id, string Name);
 }

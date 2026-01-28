@@ -6,7 +6,7 @@ namespace SAMGestor.Application.Features.Reports.Templates;
 
 /// <summary>
 /// Relatório de Bem-Estar organizado por família.
-/// Mostra rahamistas de cada família com campo para anotar medicamentos/observações.
+/// Mostra cada família com espaço para anotar medicamentos/observações.
 /// </summary>
 
 public sealed class WellnessPerFamilyTemplate : IReportTemplate
@@ -30,121 +30,84 @@ public sealed class WellnessPerFamilyTemplate : IReportTemplate
 
         var retreatId = ctx.RetreatId;
 
-        var paidRegistrationIds = await _readDb.ToListAsync(
-            _readDb.Payments
-                .Where(p => p.Status == PaymentStatus.Paid)
-                .Select(p => p.RegistrationId),
+        var familiesFromDb = await _readDb.ToListAsync(
+            _readDb.Families
+                .Where(f => f.RetreatId == retreatId),
             ct);
 
-        var paidSet = paidRegistrationIds.ToHashSet();
-
-        var registrationsQuery = _readDb.Registrations
-            .Where(r => r.RetreatId == retreatId &&
-                       r.Status == RegistrationStatus.Confirmed &&
-                       paidSet.Contains(r.Id))
-            .Select(r => new
+        var families = familiesFromDb
+            .Select(f => new FamilyRow(
+                f.Id,
+                f.Name.Value,
+                f.Color.HexCode
+            ))
+            .OrderBy(f => 
             {
-                r.Id,
-                Name = r.Name.Value
-            });
+                var parts = f.Name.Split(' ');
+                if (parts.Length > 1 && int.TryParse(parts[1], out var num))
+                    return num;
+                return int.MaxValue;
+            })
+            .ThenBy(f => f.Name)
+            .ToList();
 
-        var registrations = await _readDb.ToListAsync(registrationsQuery, ct);
-
-        if (!registrations.Any())
+        if (families.Count == 0)
             return CreateEmptyPayload(ctx);
 
-        var registrationIds = registrations.Select(r => r.Id).ToList();
+        var familyIds = families.Select(f => f.Id).ToList();
 
-        var familyMembersQuery = _readDb.FamilyMembers
-            .Where(fm => registrationIds.Contains(fm.RegistrationId))
-            .Select(fm => new { fm.FamilyId, fm.RegistrationId });
+        var familyMembers = await _readDb.ToListAsync(
+            _readDb.FamilyMembers
+                .Where(fm => familyIds.Contains(fm.FamilyId))
+                .Select(fm => new FamilyMemberRow(fm.FamilyId, fm.RegistrationId)),
+            ct);
 
-        var familyMembers = await _readDb.ToListAsync(familyMembersQuery, ct);
+        var registrationIds = familyMembers.Select(fm => fm.RegistrationId).Distinct().ToList();
 
-        var familyIds = familyMembers.Select(fm => fm.FamilyId).Distinct().ToList();
+        var registrationsFromDb = await _readDb.ToListAsync(
+            _readDb.Registrations
+                .Where(r => registrationIds.Contains(r.Id)),
+            ct);
 
-        var familiesQuery = _readDb.Families
-            .Where(f => familyIds.Contains(f.Id))
-            .OrderBy(f => f.Name.Value)
-            .Select(f => new
-            {
-                f.Id,
-                Name = f.Name.Value,
-                Color = f.Color.HexCode
-            });
-
-        var families = await _readDb.ToListAsync(familiesQuery, ct);
+        var confirmedIds = registrationsFromDb.Select(r => r.Id).ToHashSet();
         
-        var familyDict = families.ToDictionary(f => f.Id);
-        var memberDict = familyMembers.ToDictionary(fm => fm.RegistrationId, fm => fm.FamilyId);
-
-        var wellnessData = new List<WellnessRow>();
+        var wellnessData = new List<WellnessGroup>();
 
         foreach (var family in families)
         {
-            var familyParticipants = familyMembers
-                .Where(fm => fm.FamilyId == family.Id)
-                .Select(fm => fm.RegistrationId)
-                .ToList();
+            var memberCount = familyMembers
+                .Count(fm => fm.FamilyId == family.Id);
 
-            var participants = registrations
-                .Where(r => familyParticipants.Contains(r.Id))
-                .OrderBy(r => r.Name)
-                .ToList();
-
-            wellnessData.Add(new WellnessRow
+            if (memberCount > 0)
             {
-                FamilyId = family.Id,
-                FamilyName = family.Name,
-                FamilyColor = family.Color,
-                Participants = participants.Select(p => new WellnessParticipant
+                wellnessData.Add(new WellnessGroup
                 {
-                    RegistrationId = p.Id,
-                    Name = p.Name
-                }).ToList()
-            });
+                    FamilyId = family.Id,
+                    FamilyName = family.Name,
+                    FamilyColor = family.Color,
+                    MemberCount = memberCount
+                });
+            }
         }
-        
+
+        if (wellnessData.Count == 0)
+            return CreateEmptyPayload(ctx);
+
+        var totalFamilies = wellnessData.Count;
+        var page = take > 0 ? (skip / take) + 1 : 1;
+
+        var pagedFamilies = take > 0
+            ? wellnessData.Skip(skip).Take(take).ToList()
+            : wellnessData;
+
         var columns = new[]
         {
-            new ColumnDef("family", "Família"),
-            new ColumnDef("name", "Rahamista"),
-            new ColumnDef("medicacao", "Medicamento/Observações"),
-            new ColumnDef("familyColor", "Cor")
+            new ColumnDef("familyName", "Família"),
+            new ColumnDef("familyColor", "Cor"),
+            new ColumnDef("memberCount", "Total Membros")
         };
 
-        var data = new List<IDictionary<string, object?>>();
-
-        foreach (var family in wellnessData)
-        {
-            var isFirstInFamily = true;
-
-            foreach (var participant in family.Participants)
-            {
-                data.Add(new Dictionary<string, object?>
-                {
-                    ["family"] = isFirstInFamily ? family.FamilyName : "",
-                    ["name"] = participant.Name,
-                    ["medicacao"] = "",  
-                    ["familyColor"] = family.FamilyColor
-                });
-
-                isFirstInFamily = false;
-            }
-            
-            if (wellnessData.IndexOf(family) < wellnessData.Count - 1)
-            {
-                data.Add(new Dictionary<string, object?>
-                {
-                    ["family"] = "",
-                    ["name"] = "",
-                    ["medicacao"] = "",
-                    ["familyColor"] = "#FFFFFF"
-                });
-            }
-        }
-
-        var totalParticipants = registrations.Count;
+        var data = pagedFamilies.Select(BuildFamilyRow).ToList();
 
         var header = new ReportHeader(
             TemplateKey: Key,
@@ -155,13 +118,25 @@ public sealed class WellnessPerFamilyTemplate : IReportTemplate
             RetreatName: ctx.RetreatName
         );
 
+        var totalParticipants = wellnessData.Sum(w => w.MemberCount);
+
         var summary = new Dictionary<string, object?>
         {
-            ["totalFamilies"] = families.Count,
+            ["totalFamilies"] = totalFamilies,
             ["totalParticipants"] = totalParticipants
         };
 
-        return new ReportPayload(header, columns, data, summary, totalParticipants, 1, 0);
+        return new ReportPayload(header, columns, data, summary, totalFamilies, page, take);
+    }
+
+    private IDictionary<string, object?> BuildFamilyRow(WellnessGroup group)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["familyName"] = group.FamilyName,
+            ["familyColor"] = group.FamilyColor,
+            ["memberCount"] = group.MemberCount
+        };
     }
 
     private ReportPayload CreateEmptyPayload(ReportContext ctx)
@@ -183,18 +158,17 @@ public sealed class WellnessPerFamilyTemplate : IReportTemplate
 
         return new ReportPayload(header, columns, data, new Dictionary<string, object?>(), 0, 1, 0);
     }
+    
+    
+    private sealed record FamilyRow(Guid Id, string Name, string Color);
 
-    private class WellnessRow
+    private sealed record FamilyMemberRow(Guid FamilyId, Guid RegistrationId);
+
+    private sealed class WellnessGroup
     {
         public Guid FamilyId { get; set; }
         public string FamilyName { get; set; } = string.Empty;
         public string FamilyColor { get; set; } = string.Empty;
-        public List<WellnessParticipant> Participants { get; set; } = new();
-    }
-
-    private class WellnessParticipant
-    {
-        public Guid RegistrationId { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public int MemberCount { get; set; }
     }
 }

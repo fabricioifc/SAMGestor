@@ -205,7 +205,7 @@ public sealed class RahamistasPerFamiliaTemplate : IReportTemplate
     {
         var reg = member.Registration!;
         var idade = CalculateAge(reg.BirthDate);
-        var altura = reg.HeightCm.HasValue ? $"{reg.HeightCm.Value:0.00}" : "-";
+        var altura = reg.HeightCm.HasValue ? $"{reg.HeightCm.Value:F0}" : "-";
         var peso = reg.WeightKg.HasValue ? $"{reg.WeightKg.Value:0}" : "-";
         var paymentStatus = GetPaymentStatusFromRegistration(reg.Status);
 
