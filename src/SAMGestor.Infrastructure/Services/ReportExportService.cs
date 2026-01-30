@@ -73,15 +73,24 @@ public sealed class ReportExportService : IReportExporter
         string name)
     {
         QuestPDF.Settings.License = LicenseType.Community;
+        
+        byte[]? logoPng = null;
+        try
+        {
+            var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "assets", "images", "logo.png");
+            if (File.Exists(logoPath))
+                logoPng = File.ReadAllBytes(logoPath);
+        }
+        catch { }
 
         return payload.report.TemplateKey switch
         {
-            "people-epitaph" => ExportPdfEpitaph(payload, name),
-            "contemplated-participants" => ExportPdfContemplatedParticipants(payload, name),
-            "tents-allocation" => ExportPdfTentAllocation(payload, name),
-            "rahamistas-per-familia" => ExportPdfRahamistasPerFamilia(payload, name),
-            "check-in-bota-fora" => ExportPdfCheckInBotaFora(payload, name),
-            "wellness-per-family" => ExportPdfWellnessPerFamily(payload, name),
+            "people-epitaph" => ExportPdfEpitaph(payload, name, logoPng),
+            "contemplated-participants" => ExportPdfContemplatedParticipants(payload, name, logoPng),
+            "tents-allocation" => ExportPdfTentAllocation(payload, name, logoPng),
+            "rahamistas-per-familia" => ExportPdfRahamistasPerFamilia(payload, name, logoPng),
+            "check-in-bota-fora" => ExportPdfCheckInBotaFora(payload, name, logoPng),
+            "wellness-per-family" => ExportPdfWellnessPerFamily(payload, name, logoPng),
             "carta-five-minutes" => ExportPdfCartaFiveMinutes(payload, name),
             "tape-names" => ExportPdfTapeNames(payload, name),
             "bags-distribution" => ExportPdfBagsDistribution(payload, name),
@@ -91,12 +100,14 @@ public sealed class ReportExportService : IReportExporter
     }
 
     // ========== PDF CUSTOMIZADO: Lápides dos Participantes ==========
-  private static (string ContentType, string FileName, byte[] Bytes) ExportPdfEpitaph(
+ private static (string ContentType, string FileName, byte[] Bytes) ExportPdfEpitaph(
     ReportPayload payload,
-    string name)
+    string name,
+    byte[]? logoPng)
 {
     var title = payload.report.Title ?? "Lápides dos Participantes";
     var retreatName = payload.report.RetreatName ?? "";
+    int totalPages = 0;
 
     var pdfBytes = Document.Create(doc =>
     {
@@ -132,18 +143,71 @@ public sealed class ReportExportService : IReportExporter
                     page.Margin(15);
                     page.DefaultTextStyle(x => x.FontSize(9));
 
-                    // Header com título, retiro e data
+                    // ===== HEADER PADRÃO =====
                     page.Header().Column(col =>
                     {
-                        col.Item().Text(title).FontSize(13).SemiBold();
-                        if (!string.IsNullOrWhiteSpace(retreatName))
-                            col.Item().Text(retreatName).FontSize(9).FontColor(Colors.Grey.Darken1);
-                        col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                            .FontSize(8).FontColor(Colors.Grey.Darken2);
+                        // Linha 1: Informações à esquerda + Logo à direita
+                        col.Item()
+                            .Row(row =>
+                            {
+                                // ESQUERDA - Título e informações
+                                row.RelativeColumn(2)
+                                    .Column(c =>
+                                    {
+                                        c.Item()
+                                            .Text(title)
+                                            .FontSize(13)
+                                            .Bold();
+                                        
+                                        if (!string.IsNullOrWhiteSpace(retreatName))
+                                            c.Item()
+                                                .Text($"Retiro: {retreatName}")
+                                                .FontSize(9)
+                                                .FontColor("#5C5C5C");
+                                        
+                                        c.Item()
+                                            .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                            .FontSize(8)
+                                            .FontColor("#999999");
+                                    });
+
+                                // DIREITA - Logo
+                                if (logoPng != null)
+                                {
+                                    row.RelativeColumn(1)
+                                        .Column(c =>
+                                        {
+                                            c.Item()
+                                                .AlignRight()
+                                                .Height(45)
+                                                .Image(logoPng);
+                                            
+                                            c.Item()
+                                                .AlignRight()
+                                                .PaddingTop(3)
+                                                .Text("Comunidade Servos")
+                                                .FontSize(6.5f)
+                                                .Bold()
+                                                .FontColor("#6D4C41");
+                                            
+                                            c.Item()
+                                                .AlignRight()
+                                                .Text("Adoradores da Misericórdia")
+                                                .FontSize(6.5f)
+                                                .FontColor("#8D6E63");
+                                        });
+                                }
+                            });
+                        
+                        // Linha separadora
+                        col.Item()
+                            .PaddingTop(8)
+                            .PaddingBottom(8)
+                            .BorderBottom(1)
+                            .BorderColor("#DDDDDD");
                         
                         // Título da família
                         col.Item()
-                            .PaddingTop(8)
                             .Background(Color.FromHex(familyColor))
                             .Padding(6)
                             .AlignCenter()
@@ -151,10 +215,9 @@ public sealed class ReportExportService : IReportExporter
                             .FontSize(11)
                             .SemiBold()
                             .FontColor(Colors.White);
-                        
-                        col.Item().PaddingBottom(8);
                     });
 
+                    // ===== CONTEÚDO =====
                     page.Content().Column(content =>
                     {
                         // Grid 2x4 - lotando a página na vertical
@@ -179,34 +242,116 @@ public sealed class ReportExportService : IReportExporter
                             });
                         }
                     });
+
+                    // ===== FOOTER PADRÃO =====
+                    page.Footer().Column(col =>
+                    {
+                        // Linha separadora
+                        col.Item()
+                            .PaddingTop(8)
+                            .PaddingBottom(8)
+                            .BorderTop(1)
+                            .BorderColor("#DDDDDD");
+
+                        // Conteúdo do footer
+                        col.Item()
+                            .Row(row =>
+                            {
+                                // Esquerda - Sistema
+                                row.RelativeColumn(2)
+                                    .AlignLeft()
+                                    .Text("SAMGestor - Lápides dos Participantes")
+                                    .FontSize(8)
+                                    .FontColor("#666666");
+
+                                // Direita - Paginação
+                                row.RelativeColumn(1)
+                                    .AlignRight()
+                                    .Text($"Página {pageCount + 1}")
+                                    .FontSize(8)
+                                    .FontColor("#666666");
+                            });
+                    });
                 });
 
                 pageCount++;
             }
         }
 
-        // PÁGINA FINAL: RESUMO
+        totalPages = pageCount;
+
+        // ===== PÁGINA FINAL: RESUMO =====
         doc.Page(page =>
         {
             page.Size(PageSizes.A4);
-            page.Margin(20);
+            page.Margin(15);
             page.DefaultTextStyle(x => x.FontSize(9));
 
+            // HEADER na página final também
             page.Header().Column(col =>
             {
-                col.Item().Text(title).FontSize(14).SemiBold();
-                if (!string.IsNullOrWhiteSpace(retreatName))
-                    col.Item().Text(retreatName).FontSize(10).FontColor(Colors.Grey.Darken1);
-                col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                    .FontSize(8).FontColor(Colors.Grey.Darken2);
-                col.Item().PaddingBottom(10);
+                col.Item()
+                    .Row(row =>
+                    {
+                        row.RelativeColumn(2)
+                            .Column(c =>
+                            {
+                                c.Item()
+                                    .Text(title)
+                                    .FontSize(13)
+                                    .Bold();
+                                
+                                if (!string.IsNullOrWhiteSpace(retreatName))
+                                    c.Item()
+                                        .Text($"Retiro: {retreatName}")
+                                        .FontSize(9)
+                                        .FontColor("#5C5C5C");
+                                
+                                c.Item()
+                                    .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                    .FontSize(8)
+                                    .FontColor("#999999");
+                            });
+
+                        if (logoPng != null)
+                        {
+                            row.RelativeColumn(1)
+                                .Column(c =>
+                                {
+                                    c.Item()
+                                        .AlignRight()
+                                        .Height(45)
+                                        .Image(logoPng);
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .PaddingTop(3)
+                                        .Text("Comunidade Servos")
+                                        .FontSize(6.5f)
+                                        .Bold()
+                                        .FontColor("#6D4C41");
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .Text("Adoradores da Misericórdia")
+                                        .FontSize(6.5f)
+                                        .FontColor("#8D6E63");
+                                });
+                        }
+                    });
+                
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderBottom(1)
+                    .BorderColor("#DDDDDD");
             });
 
             page.Content().Column(col =>
             {
-                col.Item().PaddingTop(20).Text("Resumo Geral").FontSize(13).SemiBold();
+                col.Item().PaddingTop(20).Text("Resumo Geral").FontSize(13).Bold();
 
-                col.Item().PaddingTop(10).Table(table =>
+                col.Item().PaddingTop(15).Table(table =>
                 {
                     table.ColumnsDefinition(columns =>
                     {
@@ -238,7 +383,33 @@ public sealed class ReportExportService : IReportExporter
                     table.Cell().Element(DataCell).AlignCenter().Text(withPhoto.ToString());
                 });
 
-                col.Item().PaddingTop(20).Text($"Total de Páginas de Lápides: {pageCount}").FontSize(9).Italic();
+                col.Item().PaddingTop(20).Text($"Total de Páginas de Lápides: {totalPages}").FontSize(9).Italic().FontColor("#666666");
+            });
+
+            // FOOTER na página final também
+            page.Footer().Column(col =>
+            {
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderTop(1)
+                    .BorderColor("#DDDDDD");
+
+                col.Item()
+                    .Row(row =>
+                    {
+                        row.RelativeColumn(2)
+                            .AlignLeft()
+                            .Text("SAMGestor - Lápides dos Participantes")
+                            .FontSize(8)
+                            .FontColor("#666666");
+
+                        row.RelativeColumn(1)
+                            .AlignRight()
+                            .Text($"Página {totalPages + 1}")
+                            .FontSize(8)
+                            .FontColor("#666666");
+                    });
             });
         });
     }).GeneratePdf();
@@ -358,19 +529,22 @@ private static string ExtractFamilyOrderKey(string familyName)
     // ========== PDF CUSTOMIZADO: Participantes Contemplados ==========
  private static (string ContentType, string FileName, byte[] Bytes) ExportPdfContemplatedParticipants(
     ReportPayload payload,
-    string name)
+    string name,
+    byte[]? logoPng)
 {
     var title = payload.report.Title ?? "Participantes Contemplados";
     var retreatName = payload.report.RetreatName ?? "";
+    int totalPages = 0;
 
     var pdfBytes = Document.Create(doc =>
     {
-        var participantsPerPage = 5; // Ajustado para caber novos campos
+        var participantsPerPage = 6; 
 
-        var totalPages = (payload.data.Count + participantsPerPage - 1) / participantsPerPage;
+        var totalPageCount = (payload.data.Count + participantsPerPage - 1) / participantsPerPage;
+        totalPages = totalPageCount;
 
         // Páginas com participantes
-        for (int pageNum = 0; pageNum < totalPages; pageNum++)
+        for (int pageNum = 0; pageNum < totalPageCount; pageNum++)
         {
             var pageParticipants = payload.data
                 .Skip(pageNum * participantsPerPage)
@@ -383,17 +557,73 @@ private static string ExtractFamilyOrderKey(string familyName)
                 page.Margin(20);
                 page.DefaultTextStyle(x => x.FontSize(9));
 
-                // Header em todas as páginas
-                page.Header().Column(col =>
+                // ===== HEADER (SÓ NA PRIMEIRA PÁGINA) =====
                 {
-                    col.Item().Text(title).FontSize(14).SemiBold();
-                    if (!string.IsNullOrWhiteSpace(retreatName))
-                        col.Item().Text(retreatName).FontSize(10).FontColor(Colors.Grey.Darken1);
-                    col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                        .FontSize(8).FontColor(Colors.Grey.Darken2);
-                    col.Item().PaddingBottom(10);
-                });
+                    page.Header().Column(col =>
+                    {
+                        // Linha 1: Informações à esquerda + Logo à direita
+                        col.Item()
+                            .Row(row =>
+                            {
+                                // ESQUERDA - Título e informações
+                                row.RelativeColumn(2)
+                                    .Column(c =>
+                                    {
+                                        c.Item()
+                                            .Text(title)
+                                            .FontSize(13)
+                                            .Bold();
+                                        
+                                        if (!string.IsNullOrWhiteSpace(retreatName))
+                                            c.Item()
+                                                .Text($"Retiro: {retreatName}")
+                                                .FontSize(9)
+                                                .FontColor("#5C5C5C");
+                                        
+                                        c.Item()
+                                            .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                            .FontSize(8)
+                                            .FontColor("#999999");
+                                    });
 
+                                // DIREITA - Logo
+                                if (logoPng != null)
+                                {
+                                    row.RelativeColumn(1)
+                                        .Column(c =>
+                                        {
+                                            c.Item()
+                                                .AlignRight()
+                                                .Height(45)
+                                                .Image(logoPng);
+                                            
+                                            c.Item()
+                                                .AlignRight()
+                                                .PaddingTop(3)
+                                                .Text("Comunidade Servos")
+                                                .FontSize(6.5f)
+                                                .Bold()
+                                                .FontColor("#6D4C41");
+                                            
+                                            c.Item()
+                                                .AlignRight()
+                                                .Text("Adoradores da Misericórdia")
+                                                .FontSize(6.5f)
+                                                .FontColor("#8D6E63");
+                                        });
+                                }
+                            });
+                        
+                        // Linha separadora
+                        col.Item()
+                            .PaddingTop(8)
+                            .PaddingBottom(8)
+                            .BorderBottom(1)
+                            .BorderColor("#DDDDDD");
+                    });
+                }
+
+                // ===== CONTEÚDO =====
                 page.Content().Column(col =>
                 {
                     foreach (var participant in pageParticipants)
@@ -532,29 +762,109 @@ private static string ExtractFamilyOrderKey(string familyName)
                         });
                     }
                 });
+
+                // ===== FOOTER (EM TODAS AS PÁGINAS) =====
+                page.Footer().Column(col =>
+                {
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
+                        .BorderTop(1)
+                        .BorderColor("#DDDDDD");
+
+                    // Conteúdo do footer
+                    col.Item()
+                        .Row(row =>
+                        {
+                            // Esquerda - Sistema
+                            row.RelativeColumn(2)
+                                .AlignLeft()
+                                .Text("SAMGestor - Participantes Contemplados")
+                                .FontSize(8)
+                                .FontColor("#666666");
+
+                            // Direita - Paginação
+                            row.RelativeColumn(1)
+                                .AlignRight()
+                                .Text($"Página {pageNum + 1}")
+                                .FontSize(8)
+                                .FontColor("#666666");
+                        });
+                });
             });
         }
 
-        // PÁGINA FINAL: RESUMO
+        // ===== PÁGINA FINAL: RESUMO =====
         doc.Page(page =>
         {
             page.Size(PageSizes.A4);
             page.Margin(20);
             page.DefaultTextStyle(x => x.FontSize(9));
 
+            // HEADER na página final também (SÓ SE FOR A ÚNICA PÁGINA OU ÚLTIMA)
             page.Header().Column(col =>
             {
-                col.Item().Text(title).FontSize(14).SemiBold();
-                if (!string.IsNullOrWhiteSpace(retreatName))
-                    col.Item().Text(retreatName).FontSize(10).FontColor(Colors.Grey.Darken1);
-                col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                    .FontSize(8).FontColor(Colors.Grey.Darken2);
-                col.Item().PaddingBottom(10);
+                col.Item()
+                    .Row(row =>
+                    {
+                        row.RelativeColumn(2)
+                            .Column(c =>
+                            {
+                                c.Item()
+                                    .Text(title)
+                                    .FontSize(13)
+                                    .Bold();
+                                
+                                if (!string.IsNullOrWhiteSpace(retreatName))
+                                    c.Item()
+                                        .Text($"Retiro: {retreatName}")
+                                        .FontSize(9)
+                                        .FontColor("#5C5C5C");
+                                
+                                c.Item()
+                                    .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                    .FontSize(8)
+                                    .FontColor("#999999");
+                            });
+
+                        if (logoPng != null)
+                        {
+                            row.RelativeColumn(1)
+                                .Column(c =>
+                                {
+                                    c.Item()
+                                        .AlignRight()
+                                        .Height(45)
+                                        .Image(logoPng);
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .PaddingTop(3)
+                                        .Text("Comunidade Servos")
+                                        .FontSize(6.5f)
+                                        .Bold()
+                                        .FontColor("#6D4C41");
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .Text("Adoradores da Misericórdia")
+                                        .FontSize(6.5f)
+                                        .FontColor("#8D6E63");
+                                });
+                        }
+                    });
+                
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderBottom(1)
+                    .BorderColor("#DDDDDD");
             });
 
             page.Content().Column(col =>
             {
-                col.Item().PaddingTop(20).Text("Resumo Geral").FontSize(13).SemiBold();
+                col.Item().PaddingTop(20).Text("Resumo Geral").FontSize(13).Bold();
 
                 col.Item().PaddingTop(10).Table(table =>
                 {
@@ -604,6 +914,32 @@ private static string ExtractFamilyOrderKey(string familyName)
                         .Text(canceled.ToString()).FontColor(Colors.Red.Darken2).SemiBold();
                 }); 
             });
+
+            // FOOTER na página final também
+            page.Footer().Column(col =>
+            {
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderTop(1)
+                    .BorderColor("#DDDDDD");
+
+                col.Item()
+                    .Row(row =>
+                    {
+                        row.RelativeColumn(2)
+                            .AlignLeft()
+                            .Text("SAMGestor - Participantes Contemplados")
+                            .FontSize(8)
+                            .FontColor("#666666");
+
+                        row.RelativeColumn(1)
+                            .AlignRight()
+                            .Text($"Página {totalPages + 1}")
+                            .FontSize(8)
+                            .FontColor("#666666");
+                    });
+            });
         });
     }).GeneratePdf();
 
@@ -611,6 +947,7 @@ private static string ExtractFamilyOrderKey(string familyName)
     var fileName = $"Contemplados_{retreatNameSafe}_{DateTime.Now:dd-MM-yyyy}.pdf";
     return ("application/pdf", fileName, pdfBytes);
 }
+
 
 // Método auxiliar para cores por status
 private static (Color Background, Color TextColor) GetStatusColor(string status)
@@ -628,9 +965,10 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
 
 
     // ========== PDF CUSTOMIZADO: Alocação de Barracas ==========
-   private static (string ContentType, string FileName, byte[] Bytes) ExportPdfTentAllocation(
+  private static (string ContentType, string FileName, byte[] Bytes) ExportPdfTentAllocation(
     ReportPayload payload,
-    string name)
+    string name,
+    byte[]? logoPng)
 {
     var title = payload.report.Title ?? "Alocação de Barracas";
     var retreatName = payload.report.RetreatName ?? "";
@@ -672,55 +1010,82 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
                 page.Size(PageSizes.A4);
                 page.Margin(20);
 
-                // HEADER COM INFO GERAL
+                // ===== HEADER PADRÃO COM LOGO =====
                 page.Header().Column(col =>
                 {
                     col.Item()
                         .Row(row =>
                         {
+                            // ESQUERDA - Título e informações
                             row.RelativeColumn(2)
                                 .Column(c =>
                                 {
                                     c.Item()
                                         .Text(title)
-                                        .FontSize(18)
-                                        .Bold()
-                                        .FontColor(Colors.Blue.Darken3);
+                                        .FontSize(13)
+                                        .Bold();
+                                    
                                     if (!string.IsNullOrWhiteSpace(retreatName))
+                                        c.Item()
+                                            .Text($"Retiro: {retreatName}")
+                                            .FontSize(9)
+                                            .FontColor("#5C5C5C");
+                                    
+                                    c.Item()
+                                        .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                        .FontSize(8)
+                                        .FontColor("#999999");
+                                });
+
+                            // DIREITA - Logo
+                            if (logoPng != null)
+                            {
+                                row.RelativeColumn(1)
+                                    .Column(c =>
                                     {
                                         c.Item()
-                                            .Text(retreatName)
-                                            .FontSize(11)
-                                            .FontColor(Colors.Grey.Darken2);
-                                    }
-                                });
-
-                            row.RelativeColumn(1)
-                                .Column(c =>
-                                {
-                                    c.Item()
-                                        .AlignRight()
-                                        .Text($"Página {pageNum}")
-                                        .FontSize(9)
-                                        .FontColor(Colors.Grey.Darken1);
-                                });
+                                            .AlignRight()
+                                            .Height(45)
+                                            .Image(logoPng);
+                                        
+                                        c.Item()
+                                            .AlignRight()
+                                            .PaddingTop(3)
+                                            .Text("Comunidade Servos")
+                                            .FontSize(6.5f)
+                                            .Bold()
+                                            .FontColor("#6D4C41");
+                                        
+                                        c.Item()
+                                            .AlignRight()
+                                            .Text("Adoradores da Misericórdia")
+                                            .FontSize(6.5f)
+                                            .FontColor("#8D6E63");
+                                    });
+                            }
                         });
-
-                    col.Item().PaddingBottom(10);
+                    
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
+                        .BorderBottom(1)
+                        .BorderColor("#DDDDDD");
                 });
 
                 // CONTEÚDO PRINCIPAL
                 page.Content().Column(col =>
                 {
-                    // === CARD DE INFORMAÇÕES DA BARRACA ===
+                    // === CARD DE INFORMAÇÕES DA BARRACA (MAIS DISCRETO) ===
                     col.Item()
-                        .Border(2)
-                        .BorderColor(Colors.Blue.Darken3)
-                        .Background(Colors.Blue.Lighten4)
-                        .Padding(15)
+                        .PaddingBottom(15)
                         .Column(c =>
                         {
+                            // Título "BARRACA" com barra fina
                             c.Item()
+                                .BorderBottom(2)
+                                .BorderColor("#2196F3")
+                                .PaddingBottom(8)
                                 .Row(row =>
                                 {
                                     row.RelativeColumn()
@@ -728,14 +1093,14 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
                                         {
                                             col2.Item()
                                                 .Text("BARRACA")
-                                                .FontSize(9)
+                                                .FontSize(8)
                                                 .Bold()
-                                                .FontColor(Colors.Grey.Darken2);
+                                                .FontColor("#666666");
                                             col2.Item()
                                                 .Text(tentNumber)
-                                                .FontSize(24)
+                                                .FontSize(22)
                                                 .Bold()
-                                                .FontColor(Colors.Blue.Darken3);
+                                                .FontColor("#1565C0");
                                         });
 
                                     row.RelativeColumn()
@@ -743,14 +1108,14 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
                                         {
                                             col2.Item()
                                                 .Text("CAPACIDADE")
-                                                .FontSize(9)
+                                                .FontSize(8)
                                                 .Bold()
-                                                .FontColor(Colors.Grey.Darken2);
+                                                .FontColor("#666666");
                                             col2.Item()
                                                 .Text($"{participants.Count} pessoas")
                                                 .FontSize(14)
                                                 .Bold()
-                                                .FontColor(Colors.Green.Darken2);
+                                                .FontColor("#1565C0");
                                         });
 
                                     if (tentInfos.TryGetValue(tentNumber, out var info))
@@ -760,19 +1125,17 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
                                             {
                                                 col2.Item()
                                                     .Text("TIPO")
-                                                    .FontSize(9)
+                                                    .FontSize(8)
                                                     .Bold()
-                                                    .FontColor(Colors.Grey.Darken2);
+                                                    .FontColor("#666666");
                                                 col2.Item()
                                                     .Text(info.Category)
-                                                    .FontSize(12)
-                                                    .FontColor(Colors.Grey.Darken3);
+                                                    .FontSize(11)
+                                                    .FontColor("#333333");
                                             });
                                     }
                                 });
                         });
-
-                    col.Item().PaddingBottom(15);
 
                     // === TABELA DE PARTICIPANTES ===
                     col.Item()
@@ -873,26 +1236,35 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
                                 rowIndex++;
                             }
                         });
+                });
 
-                    col.Item().PaddingBottom(20);
-
-                    // === RODAPÉ ===
+                // ===== FOOTER PADRÃO =====
+                page.Footer().Column(col =>
+                {
+                    // Linha separadora
                     col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
                         .BorderTop(1)
-                        .BorderColor(Colors.Grey.Darken1)
-                        .PaddingTop(10)
+                        .BorderColor("#DDDDDD");
+
+                    // Conteúdo do footer
+                    col.Item()
                         .Row(row =>
                         {
-                            row.RelativeColumn()
-                                .Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
+                            // Esquerda - Sistema
+                            row.RelativeColumn(2)
+                                .AlignLeft()
+                                .Text("SAMGestor - Alocação de Barracas")
                                 .FontSize(8)
-                                .FontColor(Colors.Grey.Darken2);
+                                .FontColor("#666666");
 
-                            row.RelativeColumn()
+                            // Direita - Paginação
+                            row.RelativeColumn(1)
                                 .AlignRight()
-                                .Text($"SAMGestor - Relatório {title}")
+                                .Text($"Página {pageNum}")
                                 .FontSize(8)
-                                .FontColor(Colors.Grey.Darken2);
+                                .FontColor("#666666");
                         });
                 });
             });
@@ -903,6 +1275,7 @@ private static (Color Background, Color TextColor) GetStatusColor(string status)
     var fileName = $"Barracas_{retreatNameSafe}_{DateTime.Now:dd-MM-yyyy}.pdf";
     return ("application/pdf", fileName, pdfBytes);
 }
+
    
 // HELPER METHODS
    
@@ -974,7 +1347,8 @@ private static bool IsLightColor(string hexColor)
     // ========== PDF CUSTOMIZADO: Rahamistas por Família ==========
  private static (string ContentType, string FileName, byte[] Bytes) ExportPdfRahamistasPerFamilia(
     ReportPayload payload,
-    string name)
+    string name,
+    byte[]? logoPng)
 {
     var title = payload.report.Title ?? "Rahamistas por Família";
     var retreatName = payload.report.RetreatName ?? "";
@@ -982,9 +1356,12 @@ private static bool IsLightColor(string hexColor)
     var pdfBytes = Document.Create(doc =>
     {
         var families = payload.data.ToList();
+        var totalFamilies = families.Count;
+        var pageNum = 0;
 
         foreach (var family in families)
         {
+            pageNum++;
             var familyName = GetStringValue(family, "familyName", "Sem Nome");
             var familyColor = GetStringValue(family, "familyColor", "#CCCCCC");
             var totalMembers = GetIntValue(family, "totalMembers", 0);
@@ -996,14 +1373,67 @@ private static bool IsLightColor(string hexColor)
                 page.Margin(20);
                 page.DefaultTextStyle(x => x.FontSize(9));
 
-                // ===== HEADER EM CADA PÁGINA =====
+                // ===== HEADER PADRÃO COM LOGO =====
                 page.Header().Column(col =>
                 {
-                    col.Item().Text(title).FontSize(16).SemiBold();
-                    if (!string.IsNullOrWhiteSpace(retreatName))
-                        col.Item().Text(retreatName).FontSize(11).FontColor(Colors.Grey.Darken1);
-                    col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                        .FontSize(8).FontColor(Colors.Grey.Darken2);
+                    col.Item()
+                        .Row(row =>
+                        {
+                            // ESQUERDA - Título e informações
+                            row.RelativeColumn(2)
+                                .Column(c =>
+                                {
+                                    c.Item()
+                                        .Text(title)
+                                        .FontSize(13)
+                                        .Bold();
+                                    
+                                    if (!string.IsNullOrWhiteSpace(retreatName))
+                                        c.Item()
+                                            .Text($"Retiro: {retreatName}")
+                                            .FontSize(9)
+                                            .FontColor("#5C5C5C");
+                                    
+                                    c.Item()
+                                        .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                        .FontSize(8)
+                                        .FontColor("#999999");
+                                });
+
+                            // DIREITA - Logo
+                            if (logoPng != null)
+                            {
+                                row.RelativeColumn(1)
+                                    .Column(c =>
+                                    {
+                                        c.Item()
+                                            .AlignRight()
+                                            .Height(45)
+                                            .Image(logoPng);
+                                        
+                                        c.Item()
+                                            .AlignRight()
+                                            .PaddingTop(3)
+                                            .Text("Comunidade Servos")
+                                            .FontSize(6.5f)
+                                            .Bold()
+                                            .FontColor("#6D4C41");
+                                        
+                                        c.Item()
+                                            .AlignRight()
+                                            .Text("Adoradores da Misericórdia")
+                                            .FontSize(6.5f)
+                                            .FontColor("#8D6E63");
+                                    });
+                            }
+                        });
+                    
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
+                        .BorderBottom(1)
+                        .BorderColor("#DDDDDD");
                 });
 
                 page.Content().Column(col =>
@@ -1063,107 +1493,209 @@ private static bool IsLightColor(string hexColor)
                     }
                 });
 
-                // ===== FOOTER EM CADA PÁGINA =====
+                // ===== FOOTER PADRÃO =====
                 page.Footer().Column(col =>
                 {
-                    col.Item().AlignCenter()
-                        .Text($"{familyName}")
-                        .FontSize(9)
-                        .FontColor(Colors.Grey.Darken2);
-                    
-                    col.Item().AlignCenter()
-                        .Text($"{families.IndexOf(family) + 1} de {families.Count}")
-                        .FontSize(8)
-                        .FontColor(Colors.Grey.Darken3);
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
+                        .BorderTop(1)
+                        .BorderColor("#DDDDDD");
+
+                    // Conteúdo do footer
+                    col.Item()
+                        .Row(row =>
+                        {
+                            // Esquerda - Sistema
+                            row.RelativeColumn(2)
+                                .AlignLeft()
+                                .Text("SAMGestor - Rahamistas por Família")
+                                .FontSize(8)
+                                .FontColor("#666666");
+
+                            // Direita - Paginação
+                            row.RelativeColumn(1)
+                                .AlignRight()
+                                .Text($"Página {pageNum}")
+                                .FontSize(8)
+                                .FontColor("#666666");
+                        });
                 });
             });
         }
 
         // ===== PÁGINA FINAL COM RESUMO =====
         doc.Page(page =>
-{
-    page.Size(PageSizes.A4);
-    page.Margin(20);
-    page.DefaultTextStyle(x => x.FontSize(9));
+        {
+            page.Size(PageSizes.A4);
+            page.Margin(20);
+            page.DefaultTextStyle(x => x.FontSize(9));
 
-    page.Header().Column(col =>
-    {
-        col.Item().Text(title).FontSize(16).SemiBold();
-        if (!string.IsNullOrWhiteSpace(retreatName))
-            col.Item().Text(retreatName).FontSize(11).FontColor(Colors.Grey.Darken1);
-    });
-
-    page.Content().Column(col =>
-    {
-        col.Item().PaddingTop(80).AlignCenter()
-            .Text("Resumo Geral")
-            .FontSize(20)
-            .SemiBold()
-            .FontColor(Colors.Grey.Darken3);
-
-        col.Item().PaddingTop(5).AlignCenter()
-            .LineHorizontal(2)
-            .LineColor(Colors.Grey.Lighten1);
-
-        // Card de resumo
-        col.Item().PaddingTop(50).PaddingLeft(100).PaddingRight(100)
-            .Border(1)
-            .BorderColor(Colors.Grey.Lighten1)
-            .Background(Colors.Grey.Lighten4)
-            .Padding(30)
-            .Column(cardCol =>
+            // ===== HEADER PADRÃO COM LOGO =====
+            page.Header().Column(col =>
             {
-                cardCol.Item().Row(row =>
-                {
-                    row.RelativeColumn().Text("Total de Famílias")
-                        .FontSize(13)
-                        .FontColor(Colors.Grey.Darken2);
-                    
-                    row.ConstantColumn(80).AlignRight().Text($"{GetSummaryValue(payload.summary, "totalFamilies")}")
-                        .FontSize(24)
-                        .SemiBold()
-                        .FontColor(Colors.Blue.Darken2);
-                });
+                col.Item()
+                    .Row(row =>
+                    {
+                        // ESQUERDA - Título e informações
+                        row.RelativeColumn(2)
+                            .Column(c =>
+                            {
+                                c.Item()
+                                    .Text(title)
+                                    .FontSize(13)
+                                    .Bold();
+                                
+                                if (!string.IsNullOrWhiteSpace(retreatName))
+                                    c.Item()
+                                        .Text($"Retiro: {retreatName}")
+                                        .FontSize(9)
+                                        .FontColor("#5C5C5C");
+                                
+                                c.Item()
+                                    .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                    .FontSize(8)
+                                    .FontColor("#999999");
+                            });
 
-                cardCol.Item().PaddingTop(15).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten1);
-
-                cardCol.Item().PaddingTop(15).Row(row =>
-                {
-                    row.RelativeColumn().Text("Total de Participantes")
-                        .FontSize(13)
-                        .FontColor(Colors.Grey.Darken2);
-                    
-                    row.ConstantColumn(80).AlignRight().Text($"{GetSummaryValue(payload.summary, "totalParticipants")}")
-                        .FontSize(24)
-                        .SemiBold()
-                        .FontColor(Colors.Green.Darken2);
-                });
-
-                cardCol.Item().PaddingTop(15).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten1);
-
-                cardCol.Item().PaddingTop(15).Row(row =>
-                {
-                    row.RelativeColumn().Text("Média por Família")
-                        .FontSize(13)
-                        .FontColor(Colors.Grey.Darken2);
-                    
-                    var totalFamilies = Convert.ToInt32(GetSummaryValue(payload.summary, "totalFamilies"));
-                    var totalParticipants = Convert.ToInt32(GetSummaryValue(payload.summary, "totalParticipants"));
-                    var average = totalFamilies > 0 ? (double)totalParticipants / totalFamilies : 0;
-                    
-                    row.ConstantColumn(80).AlignRight().Text($"{average:F1}")
-                        .FontSize(24)
-                        .SemiBold()
-                        .FontColor(Colors.Orange.Darken2);
-                });
+                        // DIREITA - Logo
+                        if (logoPng != null)
+                        {
+                            row.RelativeColumn(1)
+                                .Column(c =>
+                                {
+                                    c.Item()
+                                        .AlignRight()
+                                        .Height(45)
+                                        .Image(logoPng);
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .PaddingTop(3)
+                                        .Text("Comunidade Servos")
+                                        .FontSize(6.5f)
+                                        .Bold()
+                                        .FontColor("#6D4C41");
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .Text("Adoradores da Misericórdia")
+                                        .FontSize(6.5f)
+                                        .FontColor("#8D6E63");
+                                });
+                        }
+                    });
+                
+                // Linha separadora
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderBottom(1)
+                    .BorderColor("#DDDDDD");
             });
 
-        col.Item().PaddingTop(60).AlignCenter()
-            .Text($"Gerado em: {DateTime.Now:dd/MM/yyyy 'às' HH:mm}")
-            .FontSize(10)
-            .FontColor(Colors.Grey.Darken1);
-    });
-});
+            page.Content().Column(col =>
+            {
+                col.Item().PaddingTop(80).AlignCenter()
+                    .Text("Resumo Geral")
+                    .FontSize(20)
+                    .SemiBold()
+                    .FontColor(Colors.Grey.Darken3);
+
+                col.Item().PaddingTop(5).AlignCenter()
+                    .LineHorizontal(2)
+                    .LineColor(Colors.Grey.Lighten1);
+
+                // Card de resumo
+                col.Item().PaddingTop(50).PaddingLeft(100).PaddingRight(100)
+                    .Border(1)
+                    .BorderColor(Colors.Grey.Lighten1)
+                    .Background(Colors.Grey.Lighten4)
+                    .Padding(30)
+                    .Column(cardCol =>
+                    {
+                        cardCol.Item().Row(row =>
+                        {
+                            row.RelativeColumn().Text("Total de Famílias")
+                                .FontSize(13)
+                                .FontColor(Colors.Grey.Darken2);
+                            
+                            row.ConstantColumn(80).AlignRight().Text($"{GetSummaryValue(payload.summary, "totalFamilies")}")
+                                .FontSize(24)
+                                .SemiBold()
+                                .FontColor(Colors.Blue.Darken2);
+                        });
+
+                        cardCol.Item().PaddingTop(15).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten1);
+
+                        cardCol.Item().PaddingTop(15).Row(row =>
+                        {
+                            row.RelativeColumn().Text("Total de Participantes")
+                                .FontSize(13)
+                                .FontColor(Colors.Grey.Darken2);
+                            
+                            row.ConstantColumn(80).AlignRight().Text($"{GetSummaryValue(payload.summary, "totalParticipants")}")
+                                .FontSize(24)
+                                .SemiBold()
+                                .FontColor(Colors.Green.Darken2);
+                        });
+
+                        cardCol.Item().PaddingTop(15).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten1);
+
+                        cardCol.Item().PaddingTop(15).Row(row =>
+                        {
+                            row.RelativeColumn().Text("Média por Família")
+                                .FontSize(13)
+                                .FontColor(Colors.Grey.Darken2);
+                            
+                            var totalFamiliesVal = Convert.ToInt32(GetSummaryValue(payload.summary, "totalFamilies"));
+                            var totalParticipants = Convert.ToInt32(GetSummaryValue(payload.summary, "totalParticipants"));
+                            var average = totalFamiliesVal > 0 ? (double)totalParticipants / totalFamiliesVal : 0;
+                            
+                            row.ConstantColumn(80).AlignRight().Text($"{average:F1}")
+                                .FontSize(24)
+                                .SemiBold()
+                                .FontColor(Colors.Orange.Darken2);
+                        });
+                    });
+
+                col.Item().PaddingTop(60).AlignCenter()
+                    .Text($"Gerado em: {DateTime.Now:dd/MM/yyyy 'às' HH:mm}")
+                    .FontSize(10)
+                    .FontColor(Colors.Grey.Darken1);
+            });
+
+            // ===== FOOTER PADRÃO =====
+            page.Footer().Column(col =>
+            {
+                // Linha separadora
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderTop(1)
+                    .BorderColor("#DDDDDD");
+
+                // Conteúdo do footer
+                col.Item()
+                    .Row(row =>
+                    {
+                        // Esquerda - Sistema
+                        row.RelativeColumn(2)
+                            .AlignLeft()
+                            .Text("SAMGestor - Rahamistas por Família")
+                            .FontSize(8)
+                            .FontColor("#666666");
+
+                        // Direita - Paginação
+                        row.RelativeColumn(1)
+                            .AlignRight()
+                            .Text($"Página {totalFamilies + 1}")
+                            .FontSize(8)
+                            .FontColor("#666666");
+                    });
+            });
+        });
 
     }).GeneratePdf();
 
@@ -1171,6 +1703,7 @@ private static bool IsLightColor(string hexColor)
     var fileName = $"Rahamistas_{retreatNameSafe}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
     return ("application/pdf", fileName, pdfBytes);
 }
+
 
 private static void RenderMembersTable(IContainer container, List<IDictionary<string, object?>> members)
 {
@@ -1255,44 +1788,42 @@ private static string GetSummaryValue(IDictionary<string, object?>? summary, str
     // ========== PDF CUSTOMIZADO: Check-in Bota Fora ==========
 private static (string ContentType, string FileName, byte[] Bytes) ExportPdfCheckInBotaFora(
     ReportPayload payload,
-    string name)
+    string name,
+    byte[]? logoPng)
 {
     var title = payload.report.Title ?? "Bota Fora x Rahamivida";
     var retreatName = payload.report.RetreatName ?? "";
-    var isFirstFaixa = true;
-    var faixas = new[] { "A-D", "E-H", "I-L", "M-Z" };
-    var faixasList = new List<string>();
+    
+    // TODOS OS PARTICIPANTES SEM AGRUPAR POR FAIXA
+    var allParticipants = payload.data
+        .Where(row => !string.IsNullOrWhiteSpace(GetStringValue(row, "name")))
+        .ToList();
 
-    // Verificar quais faixas têm dados
-    foreach (var faixa in faixas)
-    {
-        var faixaData = payload.data
-            .Where(row => GetStringValue(row, "faixa") == faixa)
-            .ToList();
-        if (faixaData.Any())
-            faixasList.Add(faixa);
-    }
-
-    var startRowNum = 1; // Contador global
+    var pageNum = 0;
+    var isFirstPage = true;
+    const int maxRowsPerPage = 40; // LIMITE DE LINHAS POR PÁGINA
 
     var pdfBytes = Document.Create(doc =>
     {
-        foreach (var faixa in faixasList)
+        // Dividir em chunks de 41 linhas
+        for (int i = 0; i < allParticipants.Count; i += maxRowsPerPage)
         {
-            var faixaData = payload.data
-                .Where(row => GetStringValue(row, "faixa") == faixa)
-                .ToList();
-
-            // Quebra de página a cada faixa (exceto a primeira)
-            if (!isFirstFaixa)
-                doc.Page(BuildFaixaPage(faixaData, faixa, null, null, false, startRowNum));
-            else
-                doc.Page(BuildFaixaPage(faixaData, faixa, title, retreatName, true, startRowNum));
-
-            // Incrementa o contador para a próxima faixa
-            startRowNum += faixaData.Count(row => !string.IsNullOrWhiteSpace(GetStringValue(row, "name")));
+            pageNum++;
+            var chunk = allParticipants.Skip(i).Take(maxRowsPerPage).ToList();
+            var showHeader = isFirstPage;
             
-            isFirstFaixa = false;
+            doc.Page(BuildFaixaPage(
+                chunk, 
+                "", 
+                title, 
+                retreatName, 
+                showHeader, 
+                i + 1,  // Começa de 1 na primeira página, 42 na segunda, etc
+                logoPng, 
+                pageNum
+            ));
+            
+            isFirstPage = false;
         }
     }).GeneratePdf();
 
@@ -1302,12 +1833,14 @@ private static (string ContentType, string FileName, byte[] Bytes) ExportPdfChec
 }
 
 private static Action<PageDescriptor> BuildFaixaPage(
-    List<IDictionary<string, object?>> faixaData,
+    List<IDictionary<string, object?>> pageData,
     string faixa,
     string? title,
     string? retreatName,
     bool showHeader,
-    int startRowNum)
+    int startRowNum,
+    byte[]? logoPng,
+    int pageNum)
 {
     return page =>
     {
@@ -1320,12 +1853,64 @@ private static Action<PageDescriptor> BuildFaixaPage(
         {
             page.Header().Column(col =>
             {
-                col.Item().Text(title).FontSize(14).SemiBold();
-                if (!string.IsNullOrWhiteSpace(retreatName))
-                    col.Item().Text(retreatName).FontSize(10).FontColor(Colors.Grey.Darken1);
-                col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                    .FontSize(8).FontColor(Colors.Grey.Darken2);
-                col.Item().PaddingVertical(5);
+                col.Item()
+                    .Row(row =>
+                    {
+                        // ESQUERDA - Título e informações
+                        row.RelativeColumn(2)
+                            .Column(c =>
+                            {
+                                c.Item()
+                                    .Text(title)
+                                    .FontSize(13)
+                                    .Bold();
+                                
+                                if (!string.IsNullOrWhiteSpace(retreatName))
+                                    c.Item()
+                                        .Text($"Retiro: {retreatName}")
+                                        .FontSize(9)
+                                        .FontColor("#5C5C5C");
+                                
+                                c.Item()
+                                    .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                    .FontSize(8)
+                                    .FontColor("#999999");
+                            });
+
+                        // DIREITA - Logo
+                        if (logoPng != null)
+                        {
+                            row.RelativeColumn(1)
+                                .Column(c =>
+                                {
+                                    c.Item()
+                                        .AlignRight()
+                                        .Height(45)
+                                        .Image(logoPng);
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .PaddingTop(3)
+                                        .Text("Comunidade Servos")
+                                        .FontSize(6.5f)
+                                        .Bold()
+                                        .FontColor("#6D4C41");
+                                    
+                                    c.Item()
+                                        .AlignRight()
+                                        .Text("Adoradores da Misericórdia")
+                                        .FontSize(6.5f)
+                                        .FontColor("#8D6E63");
+                                });
+                        }
+                    });
+                
+                // Linha separadora
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderBottom(1)
+                    .BorderColor("#DDDDDD");
             });
         }
 
@@ -1364,11 +1949,9 @@ private static Action<PageDescriptor> BuildFaixaPage(
                 });
 
                 var currentRowNum = startRowNum;
-                foreach (var row in faixaData)
+                foreach (var row in pageData)
                 {
                     var participantName = GetStringValue(row, "name");
-                    if (string.IsNullOrWhiteSpace(participantName)) 
-                        continue;
 
                     table.Cell().Element(DataCell).AlignCenter().Text(currentRowNum.ToString());
                     table.Cell().Element(DataCell).Text(participantName);
@@ -1399,25 +1982,56 @@ private static Action<PageDescriptor> BuildFaixaPage(
                 }
             });
         });
+
+        // ===== FOOTER PADRÃO EM TODAS AS PÁGINAS =====
+        page.Footer().Column(col =>
+        {
+            // Linha separadora
+            col.Item()
+                .PaddingTop(8)
+                .PaddingBottom(8)
+                .BorderTop(1)
+                .BorderColor("#DDDDDD");
+
+            // Conteúdo do footer
+            col.Item()
+                .Row(row =>
+                {
+                    // Esquerda - Sistema
+                    row.RelativeColumn(2)
+                        .AlignLeft()
+                        .Text("SAMGestor - Bota Fora x Rahamivida")
+                        .FontSize(8)
+                        .FontColor("#666666");
+
+                    // Direita - Paginação
+                    row.RelativeColumn(1)
+                        .AlignRight()
+                        .Text($"Página {pageNum}")
+                        .FontSize(8)
+                        .FontColor("#666666");
+                });
+        });
     };
 }
 
 
 
     // ========== PDF CUSTOMIZADO: Bem-Estar por Família ==========
-    private static (string ContentType, string FileName, byte[] Bytes) ExportPdfWellnessPerFamily(
+private static (string ContentType, string FileName, byte[] Bytes) ExportPdfWellnessPerFamily(
     ReportPayload payload,
-    string name)
+    string name,
+    byte[]? logoPng)
 {
     var title = payload.report.Title ?? "Bem-Estar por Família";
     var retreatName = payload.report.RetreatName ?? "";
+    var pageNum = 0;
 
     var pdfBytes = Document.Create(doc =>
     {
-        var isFirstPage = true;
-
         foreach (var family in payload.data)
         {
+            pageNum++;
             var familyName = GetStringValue(family, "familyName", "Sem Nome");
             var familyColor = GetStringValue(family, "familyColor", "#CCCCCC");
             var memberCount = GetIntValue(family, "memberCount", 0);
@@ -1428,36 +2042,89 @@ private static Action<PageDescriptor> BuildFaixaPage(
                 page.Margin(15);
                 page.DefaultTextStyle(x => x.FontSize(9));
 
-                // Header em cada página
+                // ===== HEADER PADRÃO COM LOGO EM TODAS AS PÁGINAS =====
                 page.Header().Column(col =>
                 {
-                    col.Item().Text(title).FontSize(16).SemiBold();
-                    if (!string.IsNullOrWhiteSpace(retreatName))
-                        col.Item().Text(retreatName).FontSize(11).FontColor(Colors.Grey.Darken1);
-                    col.Item().Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
-                        .FontSize(8).FontColor(Colors.Grey.Darken2);
+                    col.Item()
+                        .Row(row =>
+                        {
+                            // ESQUERDA - Título e informações
+                            row.RelativeColumn(2)
+                                .Column(c =>
+                                {
+                                    c.Item()
+                                        .Text(title)
+                                        .FontSize(13)
+                                        .Bold();
+                                    
+                                    if (!string.IsNullOrWhiteSpace(retreatName))
+                                        c.Item()
+                                            .Text($"Retiro: {retreatName}")
+                                            .FontSize(9)
+                                            .FontColor("#5C5C5C");
+                                    
+                                    c.Item()
+                                        .Text($"Gerado em {DateTime.Now:dd/MM/yyyy} às {DateTime.Now:HH:mm}")
+                                        .FontSize(8)
+                                        .FontColor("#999999");
+                                });
+
+                            // DIREITA - Logo
+                            if (logoPng != null)
+                            {
+                                row.RelativeColumn(1)
+                                    .Column(c =>
+                                    {
+                                        c.Item()
+                                            .AlignRight()
+                                            .Height(40)
+                                            .Image(logoPng);
+                                        
+                                        c.Item()
+                                            .AlignRight()
+                                            .PaddingTop(2)
+                                            .Text("Comunidade Servos")
+                                            .FontSize(6)
+                                            .Bold()
+                                            .FontColor("#6D4C41");
+                                        
+                                        c.Item()
+                                            .AlignRight()
+                                            .Text("Adoradores da Misericórdia")
+                                            .FontSize(6)
+                                            .FontColor("#8D6E63");
+                                    });
+                            }
+                        });
+                    
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(6)
+                        .PaddingBottom(6)
+                        .BorderBottom(1)
+                        .BorderColor("#DDDDDD");
                 });
 
                 page.Content().Column(col =>
                 {
-                    // Header da família
-                    col.Item().PaddingTop(10).PaddingBottom(10)
+                    // Header da família (REDUZIDO)
+                    col.Item().PaddingTop(8).PaddingBottom(8)
                         .Background(familyColor)
-                        .Padding(10)
+                        .Padding(7)
                         .Row(row =>
                         {
                             row.RelativeColumn().Text(familyName)
-                                .FontSize(16)
+                                .FontSize(12)
                                 .SemiBold()
                                 .FontColor(GetContrastColor(familyColor));
                             
                             row.RelativeColumn().AlignRight().Text($"{memberCount} membros")
-                                .FontSize(11)
+                                .FontSize(9)
                                 .FontColor(GetContrastColor(familyColor));
                         });
 
-                    // Tabela com 10 campos vazios
-                    col.Item().PaddingTop(15).Table(table =>
+                    // Tabela com 8 campos vazios
+                    col.Item().PaddingTop(10).Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
@@ -1474,7 +2141,7 @@ private static Action<PageDescriptor> BuildFaixaPage(
                             header.Cell().Element(HeaderStyle).Text("Medicamento / Observações");
                         });
 
-                        // 10 linhas vazias
+                        // 8 linhas vazias
                         for (int i = 1; i <= 8; i++)
                         {
                             table.Cell().Element(DataCell).Text(i.ToString()).AlignCenter();
@@ -1482,7 +2149,7 @@ private static Action<PageDescriptor> BuildFaixaPage(
                                 .Border(0.5f)
                                 .BorderColor(Colors.Grey.Lighten2)
                                 .Padding(5)
-                                .Height(40)
+                                .Height(35)
                                 .AlignTop()
                                 .Text("");
 
@@ -1490,20 +2157,43 @@ private static Action<PageDescriptor> BuildFaixaPage(
                                 .Border(0.5f)
                                 .BorderColor(Colors.Grey.Lighten2)
                                 .Padding(5)
-                                .Height(40)
+                                .Height(35)
                                 .AlignTop()
                                 .Text("");
                         }
                     });
                 });
 
-                page.Footer().AlignCenter()
-                    .Text($"{familyName}")
-                    .FontSize(8)
-                    .FontColor(Colors.Grey.Darken2);
-            });
+                // ===== FOOTER PADRÃO EM TODAS AS PÁGINAS =====
+                page.Footer().Column(col =>
+                {
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(6)
+                        .PaddingBottom(6)
+                        .BorderTop(1)
+                        .BorderColor("#DDDDDD");
 
-            isFirstPage = false;
+                    // Conteúdo do footer
+                    col.Item()
+                        .Row(row =>
+                        {
+                            // Esquerda - Sistema
+                            row.RelativeColumn(2)
+                                .AlignLeft()
+                                .Text("SAMGestor - Bem-Estar por Família")
+                                .FontSize(8)
+                                .FontColor("#666666");
+
+                            // Direita - Paginação
+                            row.RelativeColumn(1)
+                                .AlignRight()
+                                .Text($"Página {pageNum}")
+                                .FontSize(8)
+                                .FontColor("#666666");
+                        });
+                });
+            });
         }
     }).GeneratePdf();
 
@@ -1511,6 +2201,7 @@ private static Action<PageDescriptor> BuildFaixaPage(
     var fileName = $"BemEstar_{retreatNameSafe}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
     return ("application/pdf", fileName, pdfBytes);
 }
+
     
     // ========== PDF CUSTOMIZADO: Carta 5 Minutos ==========
     private static (string ContentType, string FileName, byte[] Bytes) ExportPdfCartaFiveMinutes(
