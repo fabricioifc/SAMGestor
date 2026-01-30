@@ -14,11 +14,11 @@ namespace SAMGestor.API.Controllers.Reports;
 [ApiController]
 [Route("api/reports")]
 [SwaggerTag("Operações relacionadas a relatórios de retiros. (Admin,Gestor,Consultor)")]
-[Authorize(Policy = Policies.ReadOnly)] 
+[Authorize(Policy = Policies.ReadOnly)]
 public sealed class ReportsController : ControllerBase
 {
     private readonly IMediator _mediator;
-    
+
     public ReportsController(IMediator mediator) => _mediator = mediator;
 
     /// <summary>
@@ -66,7 +66,7 @@ public sealed class ReportsController : ControllerBase
     /// <summary>
     /// Gera um relatório específico,  dados estruturados em JSON.
     /// </summary>
-    
+
     [HttpGet("retreats/{retreatId:guid}/generate/{templateKey}")]
     [SwaggerOperation(
         Description = "Retorna os dados do relatório em formato JSON estruturado, " +
@@ -94,11 +94,11 @@ public sealed class ReportsController : ControllerBase
     /// </summary>
     [HttpPost("retreats/{retreatId:guid}/export")]
     [SwaggerOperation(
-        Summary = "Exporta relatório",
-        Description = "Gera e retorna o relatório no formato solicitado (CSV, PDF ou XLSX) " +
-                      "como um arquivo para download. " +
-                      "Formatos aceitos: 'csv', 'pdf', 'xlsx'. " +
-                      "Por padrão, exporta todos os registros (sem paginação)."
+        Summary = "Exporta relatório para download",
+        Description = "Gera e retorna o relatório no formato solicitado como arquivo para download. " +
+                      "**Formato recomendado: PDF** (templates customizados com layout visual). " +
+                      "CSV e XLSX usam templates genéricos (somente dados tabulares). " +
+                      "Por padrão, exporta todos os registros sem paginação (pageSize: 10000)."
     )]
     [SwaggerResponse(200, "Arquivo gerado com sucesso")]
     [SwaggerResponse(400, "Formato inválido ou template não encontrado")]
@@ -113,14 +113,50 @@ public sealed class ReportsController : ControllerBase
             request.TemplateKey,
             request.Format,
             request.Page ?? 1,
-            request.PageSize ?? 10000  // Exportação pega tudo por padrão
+            request.PageSize ?? 10000 
+        );
+
+        var result = await _mediator.Send(command, ct);
+
+        return File(result.Bytes, result.ContentType, result.FileName);
+    }
+    
+    /// <summary>
+    /// Visualiza um relatório em PDF no navegador (sem download).
+    /// </summary>
+    [HttpGet("retreats/{retreatId:guid}/preview/{templateKey}")]
+    [SwaggerOperation(
+        Summary = "Preview de relatório em PDF (inline)",
+        Description = "Gera e exibe o relatório em PDF diretamente no navegador sem forçar download. " +
+                      "Ideal para visualização rápida antes de baixar. " +
+                      "Por padrão, exibe até 10000 registros."
+    )]
+    [SwaggerResponse(200, "PDF gerado e exibido inline", typeof(FileResult))]
+    [SwaggerResponse(400, "Template não encontrado")]
+    [SwaggerResponse(404, "Retiro não encontrado")]
+    public async Task<IActionResult> PreviewReport(
+        [FromRoute] Guid retreatId,
+        [FromRoute] string templateKey,
+        [FromQuery] string format = "pdf",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10000,
+        CancellationToken ct = default)
+    {
+        var command = new ExportReportCommand(
+            retreatId,
+            templateKey,
+            format,
+            page,
+            pageSize
         );
 
         var result = await _mediator.Send(command, ct);
         
-        return File(result.Bytes, result.ContentType, result.FileName);
+        return File(result.Bytes, result.ContentType);
     }
+
 }
+
 
 /// <summary>
 /// Request para exportação de relatório
