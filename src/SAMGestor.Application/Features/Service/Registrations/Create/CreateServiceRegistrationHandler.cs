@@ -36,10 +36,10 @@ public sealed class CreateServiceRegistrationHandler(
             throw new BusinessRuleException("CPF está bloqueado.");
 
         if (await regRepo.ExistsByCpfInRetreatAsync(cmd.Cpf, cmd.RetreatId, ct))
-            throw new BusinessRuleException("CPF já inscrito neste retiro (Servir).");
+            throw new BusinessRuleException("CPF já inscrito neste retiro.");
 
         if (await regRepo.ExistsByEmailInRetreatAsync(cmd.Email, cmd.RetreatId, ct))
-            throw new BusinessRuleException("Email já inscrito neste retiro (Servir).");
+            throw new BusinessRuleException("E-mail já inscrito neste retiro.");
         
         var hasActive = await spaceRepo.HasActiveByRetreatAsync(cmd.RetreatId, ct);
         if (hasActive && cmd.PreferredSpaceId is null)
@@ -55,9 +55,48 @@ public sealed class CreateServiceRegistrationHandler(
         }
         
         var entity = new ServiceRegistration(
-            cmd.RetreatId, cmd.Name, cmd.Cpf, cmd.Email, cmd.Phone,
-            cmd.BirthDate, cmd.Gender, cmd.City, cmd.PreferredSpaceId
+            cmd.RetreatId,
+            cmd.Name,
+            cmd.Cpf,
+            cmd.Email,
+            cmd.Phone,
+            cmd.BirthDate,
+            cmd.Gender,
+            cmd.City,
+            cmd.PreferredSpaceId
         );
+
+        entity.SetMaritalStatus(cmd.MaritalStatus);
+        entity.SetPregnancy(cmd.Pregnancy);
+        entity.SetShirtSize(cmd.ShirtSize);
+        entity.SetAnthropometrics(cmd.WeightKg, cmd.HeightCm);
+        entity.SetProfession(cmd.Profession);
+        entity.SetEducationLevel(cmd.EducationLevel);
+
+        entity.SetAddress(
+            cmd.StreetAndNumber,
+            cmd.Neighborhood,
+            cmd.State,
+            cmd.PostalCode,
+            cmd.City
+        );
+        entity.SetWhatsapp(cmd.Whatsapp);
+
+        entity.SetRahaminVidaCompleted(cmd.RahaminVidaCompleted);
+        entity.SetPreviousUncalledApplications(cmd.PreviousUncalledApplications);
+        entity.SetPostRetreatLifeSummary(cmd.PostRetreatLifeSummary);
+
+        entity.SetChurchLifeDescription(cmd.ChurchLifeDescription);
+        entity.SetPrayerLifeDescription(cmd.PrayerLifeDescription);
+        entity.SetFamilyRelationshipDescription(cmd.FamilyRelationshipDescription);
+        entity.SetSelfRelationshipDescription(cmd.SelfRelationshipDescription);
+
+        if (!cmd.TermsAccepted)
+            throw new BusinessRuleException("Termos devem ser aceitos.");
+        
+        entity.AcceptTerms(cmd.TermsVersion, DateTime.UtcNow);
+        entity.SetMarketingOptIn(cmd.MarketingOptIn ?? false, DateTime.UtcNow);
+        entity.SetClientContext(cmd.ClientIp, cmd.UserAgent);
 
         await regRepo.AddAsync(entity, ct);
         
@@ -66,7 +105,6 @@ public sealed class CreateServiceRegistrationHandler(
             retreat.IncrementEmergencyCodeUsage(cmd.EmergencyCode, "SYSTEM_REGISTRATION");
             await retRepo.UpdateAsync(retreat, ct);
         }
-
         try
         {
             await uow.SaveChangesAsync(ct);
