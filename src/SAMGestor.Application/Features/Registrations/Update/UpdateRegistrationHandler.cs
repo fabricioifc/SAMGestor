@@ -1,4 +1,3 @@
-// Application/Features/Registrations/Update/UpdateRegistrationHandler.cs
 using MediatR;
 using SAMGestor.Application.Interfaces;
 using SAMGestor.Domain.Entities;
