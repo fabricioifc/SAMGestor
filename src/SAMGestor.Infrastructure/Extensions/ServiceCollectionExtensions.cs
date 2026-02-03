@@ -27,6 +27,7 @@ using SAMGestor.Infrastructure.Repositories;
 using SAMGestor.Infrastructure.Repositories.Family;
 using SAMGestor.Infrastructure.Repositories.Reports;
 using SAMGestor.Infrastructure.Repositories.Retreat;
+using SAMGestor.Infrastructure.Repositories.Service;
 using SAMGestor.Infrastructure.Repositories.User;
 using SAMGestor.Infrastructure.Services;
 using SAMGestor.Infrastructure.Services.Reports;

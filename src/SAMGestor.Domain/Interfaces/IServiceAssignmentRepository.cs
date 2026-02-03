@@ -13,4 +13,6 @@ public interface IServiceAssignmentRepository
     Task RemoveByRegistrationIdsAsync(Guid retreatId, IEnumerable<Guid> registrationIds, CancellationToken ct = default);
     Task<(IReadOnlyList<ServiceAssignment> Items, int Total)> PageBySpaceAsync(
         Guid retreatId, Guid spaceId, int skip, int take, string? search, CancellationToken ct = default);
+    Task<ServiceAssignment?> GetByRegistrationIdAsync(Guid retreatId, Guid registrationId, CancellationToken ct = default);
+
 }

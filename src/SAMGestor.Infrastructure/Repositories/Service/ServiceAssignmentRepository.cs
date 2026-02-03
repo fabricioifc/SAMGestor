@@ -3,7 +3,7 @@ using SAMGestor.Domain.Entities;
 using SAMGestor.Domain.Interfaces;
 using SAMGestor.Infrastructure.Persistence;
 
-namespace SAMGestor.Infrastructure.Repositories;
+namespace SAMGestor.Infrastructure.Repositories.Service;
 
 public sealed class ServiceAssignmentRepository(SAMContext db) : IServiceAssignmentRepository
 {
@@ -107,5 +107,17 @@ public sealed class ServiceAssignmentRepository(SAMContext db) : IServiceAssignm
 
         if (toRemove.Count > 0)
             db.ServiceAssignments.RemoveRange(toRemove);
+    }
+    
+    public async Task<ServiceAssignment?> GetByRegistrationIdAsync(
+        Guid retreatId, 
+        Guid registrationId, 
+        CancellationToken ct = default)
+    {
+        return await (from a in db.ServiceAssignments.AsNoTracking()
+                      join s in db.ServiceSpaces.AsNoTracking() on a.ServiceSpaceId equals s.Id
+                      where s.RetreatId == retreatId && a.ServiceRegistrationId == registrationId
+                      select a)
+            .FirstOrDefaultAsync(ct);
     }
 }
