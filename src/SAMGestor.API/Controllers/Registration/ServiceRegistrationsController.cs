@@ -104,7 +104,7 @@ public class ServiceRegistrationsController(
         var result = await mediator.Send(enriched, CT);
 
         return CreatedAtRoute(
-            routeName: nameof(GetById),
+            routeName: nameof(GetServiceRegistrationById),
             routeValues: new { retreatId, id = result.ServiceRegistrationId },
             value: result
         );
@@ -114,7 +114,7 @@ public class ServiceRegistrationsController(
     /// Obter os detalhes completos de uma inscrição de serviço específica por ID.
     /// (Admin, Gestor, Consultor)
     /// </summary>
-    [HttpGet("{id:guid}", Name = nameof(GetById))]
+    [HttpGet("{id:guid}", Name = nameof(GetServiceRegistrationById))]
     [Authorize(Policy = Policies.ReadOnly)]
     [SwaggerOperation(
         Summary = "Obtém detalhes de uma inscrição de serviço",
@@ -122,7 +122,7 @@ public class ServiceRegistrationsController(
     )]
     [SwaggerResponse(StatusCodes.Status200OK, "Inscrição encontrada.", typeof(GetServiceRegistrationResponse))]
     [SwaggerResponse(StatusCodes.Status404NotFound, "Inscrição não encontrada.")]
-    public async Task<IActionResult> GetById(Guid retreatId, Guid id)
+    public async Task<IActionResult> GetServiceRegistrationById(Guid retreatId, Guid id)
     {
         var dto = await mediator.Send(new GetServiceRegistrationQuery(retreatId, id), CT);
         return dto is null ? NotFound() : Ok(dto);

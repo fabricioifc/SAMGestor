@@ -1,5 +1,3 @@
-// Application/Reports/GetAvailableTemplates/GetAvailableTemplatesHandler.cs
-
 using MediatR;
 using SAMGestor.Application.Interfaces.Reports;
 using SAMGestor.Domain.Enums;
@@ -93,6 +91,16 @@ public sealed class GetAvailableTemplatesHandler
                     _readDb.Registrations.Where(r => r.RetreatId == retreatId && r.Status == RegistrationStatus.Selected),
                     ct),
 
+            "service-teams" => 
+                await _readDb.AnyAsync(
+                    _readDb.ServiceSpaces.Where(s => s.RetreatId == retreatId && s.IsActive),
+                    ct),
+
+            "service-coordinators" => 
+                await _readDb.AnyAsync(
+                    _readDb.ServiceSpaces.Where(s => s.RetreatId == retreatId && s.IsActive),
+                    ct),
+
             _ => false
         };
     }
@@ -126,6 +134,16 @@ public sealed class GetAvailableTemplatesHandler
                     _readDb.Registrations.Where(r => r.RetreatId == retreatId && r.Status == RegistrationStatus.Selected),
                     ct),
 
+            "service-teams" => 
+                await _readDb.CountAsync(
+                    _readDb.ServiceSpaces.Where(s => s.RetreatId == retreatId && s.IsActive),
+                    ct),
+
+            "service-coordinators" => 
+                await _readDb.CountAsync(
+                    _readDb.ServiceSpaces.Where(s => s.RetreatId == retreatId && s.IsActive),
+                    ct),
+
             _ => 0
         };
     }
@@ -137,6 +155,10 @@ public sealed class GetAvailableTemplatesHandler
         "shirts-by-size" => "Distribuição de camisetas por tamanho",
         "tents-allocation" => "Mapa de alocação de participantes em barracas",
         "people-epitaph" => "Informações de epitáfio dos participantes",
+        
+        "service-teams" => "Equipes de serviço com coordenadores e membros",
+        "service-coordinators" => "Coordenadores e vice-coordenadores das equipes",
+        
         _ => "Relatório disponível"
     };
 
@@ -147,6 +169,10 @@ public sealed class GetAvailableTemplatesHandler
         "shirts-by-size" => "Logística",
         "tents-allocation" => "Logística",
         "people-epitaph" => "Participantes",
+        
+        "service-teams" => "Serviço",
+        "service-coordinators" => "Serviço",
+        
         _ => "Geral"
     };
 }

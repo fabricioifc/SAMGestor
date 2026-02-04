@@ -11,6 +11,7 @@ using SAMGestor.Application.Features.Dashboards.Payments;
 using SAMGestor.Application.Features.Dashboards.Service;
 using SAMGestor.Application.Features.Registrations.Create;
 using SAMGestor.Application.Features.Reports.Templates;
+using SAMGestor.Application.Features.Reports.Templates.ServiceTemplates;
 using SAMGestor.Application.Features.Retreats.Create;
 using SAMGestor.Application.Features.Service.Spaces.Create;
 using SAMGestor.Application.Interfaces;
@@ -99,6 +100,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReportTemplate, TapeNamesTemplate>(sp => sp.GetRequiredService<TapeNamesTemplate>());
         services.AddScoped<BagsDistributionTemplate>();
         services.AddScoped<IReportTemplate, BagsDistributionTemplate>(sp => sp.GetRequiredService<BagsDistributionTemplate>());
+        services.AddScoped<ServiceTeamsTemplate>();
+        services.AddScoped<IReportTemplate, ServiceTeamsTemplate>(sp => sp.GetRequiredService<ServiceTeamsTemplate>());
+        services.AddScoped<ServiceCoordinatorsTemplate>();
+        services.AddScoped<IReportTemplate, ServiceCoordinatorsTemplate>(sp => sp.GetRequiredService<ServiceCoordinatorsTemplate>());
 
 
         services.AddMediatR(typeof(CreateRetreatHandler).Assembly);

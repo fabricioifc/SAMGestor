@@ -1,5 +1,4 @@
 using MediatR;
-using SAMGestor.Application.Dtos.Reports;
 using SAMGestor.Application.Interfaces.Reports;
 
 namespace SAMGestor.Application.Features.Reports.TemplatesList;
@@ -38,31 +37,26 @@ public sealed class GetTemplatesSchemasHandler
     {
         return key switch
         {
-            // Participantes
             "people-epitaph" => "Participantes",
             "contemplated-participants" => "Participantes",
             "tape-names" => "Participantes",
             
-            // Alocações
             "tents-allocation" => "Alocações",
             
-            // Check-in
             "check-in-bota-fora" => "Check-in",
             
-            // Bem-Estar
             "wellness-per-family" => "Bem-Estar",
             
-            // Fichas
             "participant-individual-card" => "Fichas",
             
-            // Distribuição
             "bags-distribution" => "Distribuição",
             
-            // Famílias
             "rahamistas-per-familia" => "Famílias",
             
-            // Camisetas
             "shirts-by-size" => "Camisetas",
+            
+            "service-teams" => "Serviço",
+            "service-coordinators" => "Serviço",
             
             _ => "Outros"
         };
@@ -82,6 +76,10 @@ public sealed class GetTemplatesSchemasHandler
             "bags-distribution" => "Distribuição aleatória de participantes em duas colunas",
             "rahamistas-per-familia" => "Lista de rahamistas agrupados por família com cores",
             "shirts-by-size" => "Relatório de camisetas agrupado por tamanho (P, M, G, GG, etc.)",
+            
+            "service-teams" => "Equipes de serviço com coordenadores, vice-coordenadores e membros",
+            "service-coordinators" => "Lista detalhada de coordenadores e vice-coordenadores das equipes de serviço",
+            
             _ => "Relatório customizado"
         };
     }
