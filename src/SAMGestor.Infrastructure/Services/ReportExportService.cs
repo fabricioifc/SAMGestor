@@ -95,6 +95,8 @@ public sealed class ReportExportService : IReportExporter
             "tape-names" => ExportPdfTapeNames(payload, name),
             "bags-distribution" => ExportPdfBagsDistribution(payload, name),
             "shirts-by-size" => ExportPdfShirtsBySize(payload, name),
+            "service-teams" => ExportPdfServiceTeams(payload, name, logoPng),
+            "service-coordinators" => ExportPdfServiceCoordinators(payload, name, logoPng),
             _ => ExportPdfGeneric(payload, name)
         };
     }
@@ -2471,6 +2473,1274 @@ private static (string ContentType, string FileName, byte[] Bytes) ExportPdfWell
     return ("application/pdf", fileName, pdfBytes);
 
 }
+  
+  
+   // ========== PDF CUSTOMIZADO: Equipes de Serviço ==========
+private static (string ContentType, string FileName, byte[] Bytes) ExportPdfServiceTeams(
+    ReportPayload payload,
+    string name,
+    byte[]? logoPng)
+{
+    var title = payload.report.Title ?? "Equipes de Serviço e Membros";
+    var retreatName = payload.report.RetreatName ?? "";
+    var pageNum = 0;
+
+    // Função auxiliar para obter cor de contraste
+    static string GetContrastColor(string hexColor)
+    {
+        try
+        {
+            var color = hexColor.TrimStart('#');
+            var r = Convert.ToInt32(color.Substring(0, 2), 16);
+            var g = Convert.ToInt32(color.Substring(2, 2), 16);
+            var b = Convert.ToInt32(color.Substring(4, 2), 16);
+            var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminance > 0.5 ? "#000000" : "#FFFFFF";
+        }
+        catch
+        {
+            return "#000000";
+        }
+    }
+
+    // Função auxiliar para estilo de célula de header
+    static IContainer HeaderStyle(IContainer container)
+    {
+        return container
+            .Background("#F5F5F5")
+            .Border(0.5f)
+            .BorderColor(Colors.Grey.Lighten2)
+            .Padding(5);
+    }
+
+    // Função auxiliar para células de dados
+    static IContainer DataCell(IContainer container)
+    {
+        return container
+            .Border(0.5f)
+            .BorderColor(Colors.Grey.Lighten2)
+            .Padding(5);
+    }
+
+    // CORRIGIDO: Aceita IDictionary ao invés de Dictionary
+    static string GetStringValue(IDictionary<string, object?> dict, string key, string defaultValue = "N/A")
+    {
+        if (dict.TryGetValue(key, out var value) && value != null)
+            return value.ToString() ?? defaultValue;
+        return defaultValue;
+    }
+
+    // CORRIGIDO: Aceita IDictionary ao invés de Dictionary
+    static int GetIntValue(IDictionary<string, object?> dict, string key, int defaultValue = 0)
+    {
+        if (dict.TryGetValue(key, out var value))
+        {
+            if (value is int intValue) return intValue;
+            if (int.TryParse(value?.ToString(), out var parsed)) return parsed;
+        }
+        return defaultValue;
+    }
+
+    var pdfBytes = Document.Create(doc =>
+    {
+        // ===== PÁGINAS DAS EQUIPES =====
+        foreach (var row in payload.data)
+        {
+            pageNum++;
+            
+            var spaceName = GetStringValue(row, "spaceName", "Sem nome");
+            var coordinator = row.TryGetValue("coordinator", out var coord) ? coord as IDictionary<string, object?> : null;
+            var viceCoordinator = row.TryGetValue("viceCoordinator", out var vice) ? vice as IDictionary<string, object?> : null;
+            
+            // Corrigido: pegar membros corretamente
+            var members = new List<IDictionary<string, object?>>();
+            if (row.TryGetValue("members", out var membObj))
+            {
+                if (membObj is IEnumerable<object> membEnum)
+                {
+                    members = membEnum
+                        .Where(m => m is IDictionary<string, object?>)
+                        .Cast<IDictionary<string, object?>>()
+                        .ToList();
+                }
+            }
+            
+            var totalMembers = members.Count;
+
+            // Corrigido: pegar alertas corretamente
+            var alerts = new List<string>();
+            if (row.TryGetValue("alerts", out var alertObj))
+            {
+                if (alertObj is IEnumerable<object> alertEnum)
+                {
+                    foreach (var alert in alertEnum)
+                    {
+                        if (alert == null) continue;
+            
+                        // Se for um dicionário, pegar a mensagem
+                        if (alert is IDictionary<string, object?> alertDict)
+                        {
+                            if (alertDict.TryGetValue("message", out var msg) && msg != null)
+                            {
+                                var message = msg.ToString();
+                                if (!string.IsNullOrWhiteSpace(message))
+                                    alerts.Add(message);
+                            }
+                            else if (alertDict.TryGetValue("description", out var desc) && desc != null)
+                            {
+                                var description = desc.ToString();
+                                if (!string.IsNullOrWhiteSpace(description))
+                                    alerts.Add(description);
+                            }
+                        }
+                        // Se for string direta
+                        else
+                        {
+                            var alertStr = alert.ToString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(alertStr) && !alertStr.StartsWith("System."))
+                            {
+                                alerts.Add(alertStr);
+                            }
+                        }
+                    }
+                }
+            }
+
+            doc.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(15);
+                page.DefaultTextStyle(x => x.FontSize(9));
+
+                // ===== HEADER PADRÃO (igual WellnessPerFamily) =====
+                page.Header().Column(col =>
+                {
+                    col.Item().Row(row =>
+                    {
+                        // ESQUERDA - Título e informações
+                        row.RelativeColumn(2).Column(c =>
+                        {
+                            c.Item()
+                                .Text(title)
+                                .FontSize(13)
+                                .Bold();
+                            
+                            if (!string.IsNullOrWhiteSpace(retreatName))
+                                c.Item()
+                                    .Text($"Retiro: {retreatName}")
+                                    .FontSize(9)
+                                    .FontColor("#5C5C5C");
+                            
+                            c.Item()
+                                .Text($"Gerado em {payload.report.GeneratedAt:dd/MM/yyyy} às {payload.report.GeneratedAt:HH:mm}")
+                                .FontSize(8)
+                                .FontColor("#999999");
+                        });
+
+                        // DIREITA - Logo
+                        if (logoPng != null)
+                        {
+                            row.RelativeColumn(1).Column(c =>
+                            {
+                                c.Item()
+                                    .AlignRight()
+                                    .Height(40)
+                                    .Image(logoPng);
+                                
+                                c.Item()
+                                    .AlignRight()
+                                    .PaddingTop(2)
+                                    .Text("Comunidade Servos")
+                                    .FontSize(6)
+                                    .Bold()
+                                    .FontColor("#6D4C41");
+                                
+                                c.Item()
+                                    .AlignRight()
+                                    .Text("Adoradores da Misericórdia")
+                                    .FontSize(6)
+                                    .FontColor("#8D6E63");
+                            });
+                        }
+                    });
+                    
+                    // Linha separadora (cor correta)
+                    col.Item()
+                        .PaddingTop(6)
+                        .PaddingBottom(6)
+                        .BorderBottom(1)
+                        .BorderColor("#DDDDDD");
+                });
+
+                page.Content().Column(column =>
+                {
+                    // Team Header
+                    column.Item().PaddingTop(8).PaddingBottom(8)
+                        .Background("#21808D")
+                        .Padding(7)
+                        .Row(headerRow =>
+                        {
+                            headerRow.RelativeColumn().Text(spaceName)
+                                .FontSize(12)
+                                .SemiBold()
+                                .FontColor(Colors.White);
+
+                            headerRow.RelativeColumn().AlignRight().Text($"{totalMembers} membros")
+                                .FontSize(9)
+                                .FontColor(Colors.White);
+                        });
+
+                    // Alertas (se existirem e não forem erro de sistema)
+                    if (alerts.Any())
+                    {
+                        column.Item().PaddingTop(10).Background("#FFF5F5").Border(1).BorderColor("#C01530")
+                            .Padding(8).Column(alertCol =>
+                        {
+                            alertCol.Item().PaddingBottom(4).Text("ALERTAS")
+                                .FontSize(10)
+                                .Bold()
+                                .FontColor("#C01530");
+
+                            foreach (var alert in alerts)
+                            {
+                                alertCol.Item().PaddingBottom(2).Text($"• {alert}")
+                                    .FontSize(9)
+                                    .FontColor("#C01530");
+                            }
+                        });
+                    }
+
+                    // Coordinator Section
+                    if (coordinator != null)
+                    {
+                        column.Item().PaddingTop(10).PaddingBottom(8).Column(coordCol =>
+                        {
+                            coordCol.Item().PaddingBottom(4).Text("Coordenador(a)")
+                                .FontSize(10)
+                                .Bold()
+                                .FontColor("#1F2121");
+
+                            coordCol.Item().Border(1).BorderColor("#A7A9A9").Padding(8).Row(coordRow =>
+                            {
+                                coordRow.RelativeColumn().Column(col =>
+                                {
+                                    col.Item().Text(GetStringValue(coordinator, "name"))
+                                        .FontSize(10).Bold().FontColor("#1F2121");
+                                    
+                                    col.Item().PaddingTop(2).Text(txt =>
+                                    {
+                                        txt.Span("Telefone: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(coordinator, "phone"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+
+                                    col.Item().Text(txt =>
+                                    {
+                                        txt.Span("E-mail: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(coordinator, "email"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+                                });
+
+                                coordRow.ConstantItem(80).Column(col =>
+                                {
+                                    col.Item().Text(txt =>
+                                    {
+                                        txt.Span("Idade: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(coordinator, "age"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+                                    col.Item().Text(txt =>
+                                    {
+                                        txt.Span("Cidade: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(coordinator, "city"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+                                });
+                            });
+                        });
+                    }
+
+                    // Vice-Coordinator Section
+                    if (viceCoordinator != null)
+                    {
+                        column.Item().PaddingBottom(8).Column(viceCol =>
+                        {
+                            viceCol.Item().PaddingBottom(4).Text("Vice-Coordenador(a)")
+                                .FontSize(10)
+                                .Bold()
+                                .FontColor("#1F2121");
+
+                            viceCol.Item().Border(1).BorderColor("#A7A9A9").Padding(8).Row(viceRow =>
+                            {
+                                viceRow.RelativeColumn().Column(col =>
+                                {
+                                    col.Item().Text(GetStringValue(viceCoordinator, "name"))
+                                        .FontSize(10).Bold().FontColor("#1F2121");
+                                    
+                                    col.Item().PaddingTop(2).Text(txt =>
+                                    {
+                                        txt.Span("Telefone: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(viceCoordinator, "phone"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+
+                                    col.Item().Text(txt =>
+                                    {
+                                        txt.Span("E-mail: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(viceCoordinator, "email"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+                                });
+
+                                viceRow.ConstantItem(80).Column(col =>
+                                {
+                                    col.Item().Text(txt =>
+                                    {
+                                        txt.Span("Idade: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(viceCoordinator, "age"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+                                    col.Item().Text(txt =>
+                                    {
+                                        txt.Span("Cidade: ").FontSize(8).FontColor("#626C71");
+                                        txt.Span(GetStringValue(viceCoordinator, "city"))
+                                            .FontSize(8).FontColor("#1F2121");
+                                    });
+                                });
+                            });
+                        });
+                    }
+
+                    // Members Section
+                    if (members.Any())
+                    {
+                        column.Item().PaddingTop(10).PaddingBottom(4).Text($"Membros ({members.Count})")
+                            .FontSize(10)
+                            .Bold()
+                            .FontColor("#1F2121");
+
+                        column.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(25);  // #
+                                columns.RelativeColumn(3);   // Nome
+                                columns.RelativeColumn(2);   // Telefone
+                                columns.RelativeColumn(1);   // Idade
+                                columns.RelativeColumn(2);   // Cidade
+                            });
+
+                            // Header
+                            table.Header(header =>
+                            {
+                                header.Cell().Element(HeaderStyle).Text("#").FontSize(8).Bold();
+                                header.Cell().Element(HeaderStyle).Text("Nome").FontSize(8).Bold();
+                                header.Cell().Element(HeaderStyle).Text("Telefone").FontSize(8).Bold();
+                                header.Cell().Element(HeaderStyle).Text("Idade").FontSize(8).Bold();
+                                header.Cell().Element(HeaderStyle).Text("Cidade").FontSize(8).Bold();
+                            });
+
+                            // Rows
+                            var index = 1;
+                            foreach (var member in members)
+                            {
+                                var bgColor = index % 2 == 0 ? "#FCFCF9" : "#FFFFFF";
+
+                                table.Cell().Background(bgColor).Element(DataCell)
+                                    .Text(index.ToString()).FontSize(8);
+                                
+                                table.Cell().Background(bgColor).Element(DataCell)
+                                    .Text(GetStringValue(member, "name")).FontSize(8);
+                                
+                                table.Cell().Background(bgColor).Element(DataCell)
+                                    .Text(GetStringValue(member, "phone")).FontSize(8);
+                                
+                                table.Cell().Background(bgColor).Element(DataCell)
+                                    .Text(GetStringValue(member, "age")).FontSize(8);
+                                
+                                table.Cell().Background(bgColor).Element(DataCell)
+                                    .Text(GetStringValue(member, "city")).FontSize(8);
+
+                                index++;
+                            }
+                        });
+                    }
+                });
+
+                // ===== FOOTER PADRÃO (igual WellnessPerFamily) =====
+                page.Footer().Column(col =>
+                {
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(6)
+                        .PaddingBottom(6)
+                        .BorderTop(1)
+                        .BorderColor("#DDDDDD");
+
+                    // Conteúdo do footer
+                    col.Item().Row(row =>
+                    {
+                        // Esquerda - Sistema
+                        row.RelativeColumn(2)
+                            .AlignLeft()
+                            .Text("SAMGestor - Equipes de Serviço e Membros")
+                            .FontSize(8)
+                            .FontColor("#666666");
+
+                        // Direita - Paginação
+                        row.RelativeColumn(1)
+                            .AlignRight()
+                            .Text($"Página {pageNum}")
+                            .FontSize(8)
+                            .FontColor("#666666");
+                    });
+                });
+            });
+        }
+
+        // ===== PÁGINA DO RESUMO (ÚLTIMA) =====
+        pageNum++;
+        
+        // Calcular totais corretos
+        var totalSpaces = payload.data.Count;
+        var totalMembersSum = 0;
+        var totalCoordinators = 0;
+        var totalViceCoordinators = 0;
+        
+        foreach (var row in payload.data)
+        {
+            // Contar membros
+            if (row.TryGetValue("members", out var membObj) && membObj is IEnumerable<object> membEnum)
+            {
+                totalMembersSum += membEnum.Count();
+            }
+            
+            // Contar coordenadores
+            if (row.TryGetValue("coordinator", out var coord) && coord != null)
+            {
+                totalCoordinators++;
+            }
+            
+            // Contar vice-coordenadores
+            if (row.TryGetValue("viceCoordinator", out var vice) && vice != null)
+            {
+                totalViceCoordinators++;
+            }
+        }
+
+        doc.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.Margin(15);
+            page.DefaultTextStyle(x => x.FontSize(9));
+
+            // ===== HEADER PADRÃO =====
+            page.Header().Column(col =>
+            {
+                col.Item().Row(row =>
+                {
+                    row.RelativeColumn(2).Column(c =>
+                    {
+                        c.Item()
+                            .Text(title)
+                            .FontSize(13)
+                            .Bold();
+                        
+                        if (!string.IsNullOrWhiteSpace(retreatName))
+                            c.Item()
+                                .Text($"Retiro: {retreatName}")
+                                .FontSize(9)
+                                .FontColor("#5C5C5C");
+                        
+                        c.Item()
+                            .Text($"Gerado em {payload.report.GeneratedAt:dd/MM/yyyy} às {payload.report.GeneratedAt:HH:mm}")
+                            .FontSize(8)
+                            .FontColor("#999999");
+                    });
+
+                    if (logoPng != null)
+                    {
+                        row.RelativeColumn(1).Column(c =>
+                        {
+                            c.Item()
+                                .AlignRight()
+                                .Height(40)
+                                .Image(logoPng);
+                            
+                            c.Item()
+                                .AlignRight()
+                                .PaddingTop(2)
+                                .Text("Comunidade Servos")
+                                .FontSize(6)
+                                .Bold()
+                                .FontColor("#6D4C41");
+                            
+                            c.Item()
+                                .AlignRight()
+                                .Text("Adoradores da Misericórdia")
+                                .FontSize(6)
+                                .FontColor("#8D6E63");
+                        });
+                    }
+                });
+                
+                col.Item()
+                    .PaddingTop(6)
+                    .PaddingBottom(6)
+                    .BorderBottom(1)
+                    .BorderColor("#DDDDDD");
+            });
+
+            page.Content().Column(column =>
+            {
+                column.Item().PaddingTop(15).PaddingBottom(15).Text("Resumo Geral")
+                    .FontSize(18)
+                    .Bold()
+                    .FontColor("#1F2121");
+
+                column.Item().PaddingBottom(15).BorderBottom(1).BorderColor("#DDDDDD");
+
+                // Resumo em UMA LINHA com 4 cards
+                column.Item().PaddingTop(20).Row(row =>
+                {
+                    // Card 1
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Total de Equipes")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text(totalSpaces.ToString())
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+
+                    row.Spacing(10);
+
+                    // Card 2
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Total de Membros")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text(totalMembersSum.ToString())
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+
+                    row.Spacing(10);
+
+                    // Card 3
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Coordenadores")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text(totalCoordinators.ToString())
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+
+                    row.Spacing(10);
+
+                    // Card 4
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Vice-Coordenadores")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text(totalViceCoordinators.ToString())
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+                });
+            });
+
+            // ===== FOOTER PADRÃO =====
+            page.Footer().Column(col =>
+            {
+                col.Item()
+                    .PaddingTop(6)
+                    .PaddingBottom(6)
+                    .BorderTop(1)
+                    .BorderColor("#DDDDDD");
+
+                col.Item().Row(row =>
+                {
+                    row.RelativeColumn(2)
+                        .AlignLeft()
+                        .Text("SAMGestor - Equipes de Serviço e Membros")
+                        .FontSize(8)
+                        .FontColor("#666666");
+
+                    row.RelativeColumn(1)
+                        .AlignRight()
+                        .Text($"Página {pageNum}")
+                        .FontSize(8)
+                        .FontColor("#666666");
+                });
+            });
+        });
+
+    }).GeneratePdf();
+
+    var fileName = $"Relatorio_Equipes_Servico_{retreatName.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}";
+    return ("application/pdf", $"{fileName}.pdf", pdfBytes);
+}
+
+
+ 
+  // ========== PDF CUSTOMIZADO: Coordenadores de Serviço ==========
+ private static (string ContentType, string FileName, byte[] Bytes) ExportPdfServiceCoordinators(
+    ReportPayload payload,
+    string name,
+    byte[]? logoPng)
+{
+    var title = payload.report.Title ?? "Coordenadores das Equipes de Serviço";
+    var retreatName = payload.report.RetreatName ?? "";
+    var pageNum = 0;
+
+    // Função auxiliar para obter string value
+    static string GetStringValue(IDictionary<string, object?> dict, string key, string defaultValue = "-")
+    {
+        if (dict.TryGetValue(key, out var value) && value != null)
+            return value.ToString() ?? defaultValue;
+        return defaultValue;
+    }
+
+    var pdfBytes = Document.Create(doc =>
+    {
+        // ===== PÁGINAS DOS COORDENADORES =====
+        foreach (var row in payload.data)
+        {
+            pageNum++;
+            
+            var spaceName = GetStringValue(row, "spaceName", "Sem nome");
+            var coordinator = row.TryGetValue("coordinator", out var coord) ? coord as IDictionary<string, object?> : null;
+            var viceCoordinator = row.TryGetValue("viceCoordinator", out var vice) ? vice as IDictionary<string, object?> : null;
+
+            // Pegar alertas
+            var alerts = new List<string>();
+            if (row.TryGetValue("alerts", out var alertObj))
+            {
+                if (alertObj is IEnumerable<object> alertEnum)
+                {
+                    foreach (var alert in alertEnum)
+                    {
+                        if (alert == null) continue;
+                        
+                        if (alert is IDictionary<string, object?> alertDict)
+                        {
+                            if (alertDict.TryGetValue("message", out var msg) && msg != null)
+                            {
+                                var message = msg.ToString();
+                                if (!string.IsNullOrWhiteSpace(message))
+                                    alerts.Add(message);
+                            }
+                            else if (alertDict.TryGetValue("description", out var desc) && desc != null)
+                            {
+                                var description = desc.ToString();
+                                if (!string.IsNullOrWhiteSpace(description))
+                                    alerts.Add(description);
+                            }
+                        }
+                        else
+                        {
+                            var alertStr = alert.ToString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(alertStr) && !alertStr.StartsWith("System."))
+                            {
+                                alerts.Add(alertStr);
+                            }
+                        }
+                    }
+                }
+            }
+
+            doc.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(20);
+                page.DefaultTextStyle(x => x.FontSize(9));
+
+                // ===== HEADER PADRÃO =====
+                page.Header().Column(col =>
+                {
+                    col.Item().Row(row =>
+                    {
+                        // ESQUERDA - Título e informações
+                        row.RelativeColumn(2).Column(c =>
+                        {
+                            c.Item()
+                                .Text(title)
+                                .FontSize(13)
+                                .Bold();
+                            
+                            if (!string.IsNullOrWhiteSpace(retreatName))
+                                c.Item()
+                                    .Text($"Retiro: {retreatName}")
+                                    .FontSize(9)
+                                    .FontColor("#5C5C5C");
+                            
+                            c.Item()
+                                .Text($"Gerado em {payload.report.GeneratedAt:dd/MM/yyyy} às {payload.report.GeneratedAt:HH:mm}")
+                                .FontSize(8)
+                                .FontColor("#999999");
+                        });
+
+                        // DIREITA - Logo
+                        if (logoPng != null)
+                        {
+                            row.RelativeColumn(1).Column(c =>
+                            {
+                                c.Item()
+                                    .AlignRight()
+                                    .Height(45)
+                                    .Image(logoPng);
+                                
+                                c.Item()
+                                    .AlignRight()
+                                    .PaddingTop(3)
+                                    .Text("Comunidade Servos")
+                                    .FontSize(6.5f)
+                                    .Bold()
+                                    .FontColor("#6D4C41");
+                                
+                                c.Item()
+                                    .AlignRight()
+                                    .Text("Adoradores da Misericórdia")
+                                    .FontSize(6.5f)
+                                    .FontColor("#8D6E63");
+                            });
+                        }
+                    });
+                    
+                    // Linha separadora
+                    col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
+                        .BorderBottom(1)
+                        .BorderColor("#DDDDDD");
+                });
+
+                page.Content().Column(column =>
+                {
+                    // Nome do Espaço (Header destacado)
+                    column.Item().PaddingTop(10).PaddingBottom(10)
+                        .Background("#21808D")
+                        .Padding(10)
+                        .Text(spaceName)
+                        .FontSize(14)
+                        .SemiBold()
+                        .FontColor(Colors.White);
+
+                    // Alertas (se existirem)
+                    if (alerts.Any())
+                    {
+                        column.Item().PaddingTop(10).Background("#FFF5F5").Border(1).BorderColor("#C01530")
+                            .Padding(10).Column(alertCol =>
+                        {
+                            alertCol.Item().PaddingBottom(4).Text("ALERTAS")
+                                .FontSize(10)
+                                .Bold()
+                                .FontColor("#C01530");
+
+                            foreach (var alert in alerts)
+                            {
+                                alertCol.Item().PaddingBottom(2).Text($"• {alert}")
+                                    .FontSize(9)
+                                    .FontColor("#C01530");
+                            }
+                        });
+                    }
+
+                    // COORDENADOR
+                    column.Item().PaddingTop(15).PaddingBottom(6).Text("Coordenador(a)")
+                        .FontSize(11)
+                        .Bold()
+                        .FontColor("#1F2121");
+
+                    if (coordinator != null)
+                    {
+                        column.Item().PaddingBottom(12).Row(coordRow =>
+                        {
+                            // FOTO DO COORDENADOR (90x90)
+                            coordRow.ConstantColumn(100).Column(photoCol =>
+                            {
+                                var photoStorageKey = GetStringValue(coordinator, "photoStorageKey", "");
+                                var photoContainer = photoCol.Item()
+                                    .Width(90)
+                                    .Height(90)
+                                    .Border(1)
+                                    .BorderColor(Colors.Grey.Lighten2);
+
+                                if (!string.IsNullOrWhiteSpace(photoStorageKey))
+                                {
+                                    try
+                                    {
+                                        var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                                        var photoPath = Path.Combine(wwwrootPath, photoStorageKey.Replace("/", "\\"));
+
+                                        if (File.Exists(photoPath))
+                                        {
+                                            photoContainer.Image(photoPath).FitUnproportionally();
+                                        }
+                                        else
+                                        {
+                                            photoContainer
+                                                .AlignCenter()
+                                                .AlignMiddle()
+                                                .Text("Sem Foto")
+                                                .FontSize(7)
+                                                .FontColor(Colors.Grey.Darken2);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        photoContainer
+                                            .AlignCenter()
+                                            .AlignMiddle()
+                                            .Text("Sem Foto")
+                                            .FontSize(7)
+                                            .FontColor(Colors.Grey.Darken2);
+                                    }
+                                }
+                                else
+                                {
+                                    photoContainer
+                                        .AlignCenter()
+                                        .AlignMiddle()
+                                        .Text("Sem Foto")
+                                        .FontSize(7)
+                                        .FontColor(Colors.Grey.Darken2);
+                                }
+                            });
+
+                            // INFORMAÇÕES DO COORDENADOR
+                            coordRow.RelativeColumn().Column(infoCol =>
+                            {
+                                infoCol.Item()
+                                    .Height(90)
+                                    .Border(1)
+                                    .BorderColor("#21808D")
+                                    .Padding(10)
+                                    .Column(details =>
+                                    {
+                                        // Nome
+                                        details.Item()
+                                            .Text(GetStringValue(coordinator, "name"))
+                                            .FontSize(11)
+                                            .SemiBold()
+                                            .FontColor("#1F2121");
+
+                                        // Idade, Gênero, Cidade
+                                        details.Item().PaddingTop(2)
+                                            .Text($"Idade: {GetStringValue(coordinator, "age")} anos | Gênero: {GetStringValue(coordinator, "gender")} | Cidade: {GetStringValue(coordinator, "city")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Telefone e WhatsApp
+                                        details.Item()
+                                            .Text($"Tel: {GetStringValue(coordinator, "phone")} | WhatsApp: {GetStringValue(coordinator, "whatsapp")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Email
+                                        details.Item()
+                                            .Text($"Email: {GetStringValue(coordinator, "email")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // CPF
+                                        details.Item()
+                                            .Text($"CPF: {GetStringValue(coordinator, "cpf")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Profissão e Escolaridade
+                                        details.Item()
+                                            .Text($"Profissão: {GetStringValue(coordinator, "profession")} | Escolaridade: {GetStringValue(coordinator, "educationLevel")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Data de atribuição
+                                        var assignedAt = GetStringValue(coordinator, "assignedAt", "");
+                                        if (!string.IsNullOrWhiteSpace(assignedAt) && assignedAt != "-")
+                                        {
+                                            details.Item()
+                                                .Text($"Atribuído em: {assignedAt}")
+                                                .FontSize(7f)
+                                                .Italic()
+                                                .FontColor(Colors.Grey.Darken2);
+                                        }
+                                    });
+                            });
+                        });
+                    }
+                    else
+                    {
+                        column.Item().PaddingBottom(12)
+                            .Border(1).BorderColor("#C01530")
+                            .Background("#FFF5F5")
+                            .Padding(15)
+                            .AlignCenter()
+                            .Text("Sem coordenador atribuído")
+                            .FontSize(10)
+                            .Italic()
+                            .FontColor("#C01530");
+                    }
+
+                    // VICE-COORDENADOR
+                    column.Item().PaddingTop(10).PaddingBottom(6).Text("Vice-Coordenador(a)")
+                        .FontSize(11)
+                        .Bold()
+                        .FontColor("#1F2121");
+
+                    if (viceCoordinator != null)
+                    {
+                        column.Item().PaddingBottom(12).Row(viceRow =>
+                        {
+                            // FOTO DO VICE (90x90)
+                            viceRow.ConstantColumn(100).Column(photoCol =>
+                            {
+                                var photoStorageKey = GetStringValue(viceCoordinator, "photoStorageKey", "");
+                                var photoContainer = photoCol.Item()
+                                    .Width(90)
+                                    .Height(90)
+                                    .Border(1)
+                                    .BorderColor(Colors.Grey.Lighten2);
+
+                                if (!string.IsNullOrWhiteSpace(photoStorageKey))
+                                {
+                                    try
+                                    {
+                                        var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                                        var photoPath = Path.Combine(wwwrootPath, photoStorageKey.Replace("/", "\\"));
+
+                                        if (File.Exists(photoPath))
+                                        {
+                                            photoContainer.Image(photoPath).FitUnproportionally();
+                                        }
+                                        else
+                                        {
+                                            photoContainer
+                                                .AlignCenter()
+                                                .AlignMiddle()
+                                                .Text("Sem Foto")
+                                                .FontSize(7)
+                                                .FontColor(Colors.Grey.Darken2);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        photoContainer
+                                            .AlignCenter()
+                                            .AlignMiddle()
+                                            .Text("Sem Foto")
+                                            .FontSize(7)
+                                            .FontColor(Colors.Grey.Darken2);
+                                    }
+                                }
+                                else
+                                {
+                                    photoContainer
+                                        .AlignCenter()
+                                        .AlignMiddle()
+                                        .Text("Sem Foto")
+                                        .FontSize(7)
+                                        .FontColor(Colors.Grey.Darken2);
+                                }
+                            });
+
+                            // INFORMAÇÕES DO VICE
+                            viceRow.RelativeColumn().Column(infoCol =>
+                            {
+                                infoCol.Item()
+                                    .Height(90)
+                                    .Border(1)
+                                    .BorderColor("#A7A9A9")
+                                    .Padding(10)
+                                    .Column(details =>
+                                    {
+                                        // Nome
+                                        details.Item()
+                                            .Text(GetStringValue(viceCoordinator, "name"))
+                                            .FontSize(11)
+                                            .SemiBold()
+                                            .FontColor("#1F2121");
+
+                                        // Idade, Gênero, Cidade
+                                        details.Item().PaddingTop(2)
+                                            .Text($"Idade: {GetStringValue(viceCoordinator, "age")} anos | Gênero: {GetStringValue(viceCoordinator, "gender")} | Cidade: {GetStringValue(viceCoordinator, "city")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Telefone e WhatsApp
+                                        details.Item()
+                                            .Text($"Tel: {GetStringValue(viceCoordinator, "phone")} | WhatsApp: {GetStringValue(viceCoordinator, "whatsapp")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Email
+                                        details.Item()
+                                            .Text($"Email: {GetStringValue(viceCoordinator, "email")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // CPF
+                                        details.Item()
+                                            .Text($"CPF: {GetStringValue(viceCoordinator, "cpf")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Profissão e Escolaridade
+                                        details.Item()
+                                            .Text($"Profissão: {GetStringValue(viceCoordinator, "profession")} | Escolaridade: {GetStringValue(viceCoordinator, "educationLevel")}")
+                                            .FontSize(7.5f)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        // Data de atribuição
+                                        var assignedAt = GetStringValue(viceCoordinator, "assignedAt", "");
+                                        if (!string.IsNullOrWhiteSpace(assignedAt) && assignedAt != "-")
+                                        {
+                                            details.Item()
+                                                .Text($"Atribuído em: {assignedAt}")
+                                                .FontSize(7f)
+                                                .Italic()
+                                                .FontColor(Colors.Grey.Darken2);
+                                        }
+                                    });
+                            });
+                        });
+                    }
+                    else
+                    {
+                        column.Item().PaddingBottom(12)
+                            .Border(1).BorderColor("#A84B2F")
+                            .Background("#FFF9F5")
+                            .Padding(15)
+                            .AlignCenter()
+                            .Text("Sem vice-coordenador atribuído")
+                            .FontSize(10)
+                            .Italic()
+                            .FontColor("#A84B2F");
+                    }
+                });
+
+                // ===== FOOTER PADRÃO =====
+                page.Footer().Column(col =>
+                {
+                    col.Item()
+                        .PaddingTop(8)
+                        .PaddingBottom(8)
+                        .BorderTop(1)
+                        .BorderColor("#DDDDDD");
+
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeColumn(2)
+                            .AlignLeft()
+                            .Text("SAMGestor - Coordenadores das Equipes de Serviço")
+                            .FontSize(8)
+                            .FontColor("#666666");
+
+                        row.RelativeColumn(1)
+                            .AlignRight()
+                            .Text($"Página {pageNum}")
+                            .FontSize(8)
+                            .FontColor("#666666");
+                    });
+                });
+            });
+        }
+
+        // ===== PÁGINA FINAL: RESUMO =====
+        pageNum++;
+        doc.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.Margin(20);
+            page.DefaultTextStyle(x => x.FontSize(9));
+
+            // HEADER PADRÃO
+            page.Header().Column(col =>
+            {
+                col.Item().Row(row =>
+                {
+                    row.RelativeColumn(2).Column(c =>
+                    {
+                        c.Item()
+                            .Text(title)
+                            .FontSize(13)
+                            .Bold();
+                        
+                        if (!string.IsNullOrWhiteSpace(retreatName))
+                            c.Item()
+                                .Text($"Retiro: {retreatName}")
+                                .FontSize(9)
+                                .FontColor("#5C5C5C");
+                        
+                        c.Item()
+                            .Text($"Gerado em {payload.report.GeneratedAt:dd/MM/yyyy} às {payload.report.GeneratedAt:HH:mm}")
+                            .FontSize(8)
+                            .FontColor("#999999");
+                    });
+
+                    if (logoPng != null)
+                    {
+                        row.RelativeColumn(1).Column(c =>
+                        {
+                            c.Item()
+                                .AlignRight()
+                                .Height(45)
+                                .Image(logoPng);
+                            
+                            c.Item()
+                                .AlignRight()
+                                .PaddingTop(3)
+                                .Text("Comunidade Servos")
+                                .FontSize(6.5f)
+                                .Bold()
+                                .FontColor("#6D4C41");
+                            
+                            c.Item()
+                                .AlignRight()
+                                .Text("Adoradores da Misericórdia")
+                                .FontSize(6.5f)
+                                .FontColor("#8D6E63");
+                        });
+                    }
+                });
+                
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderBottom(1)
+                    .BorderColor("#DDDDDD");
+            });
+
+            page.Content().Column(column =>
+            {
+                column.Item().PaddingTop(15).PaddingBottom(15).Text("Resumo Geral")
+                    .FontSize(18)
+                    .Bold()
+                    .FontColor("#1F2121");
+
+                column.Item().PaddingBottom(15).BorderBottom(1).BorderColor("#DDDDDD");
+
+                // Cards de resumo
+                column.Item().PaddingTop(20).Row(row =>
+                {
+                    // Total de Espaços
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Total de Espaços")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text((payload.summary.TryGetValue("totalSpaces", out var ts) ? ts : 0)?.ToString() ?? "0")
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+
+                    row.Spacing(10);
+
+                    // Coordenadores
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Coordenadores")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text((payload.summary.TryGetValue("totalCoordinators", out var tc) ? tc : 0)?.ToString() ?? "0")
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+
+                    row.Spacing(10);
+
+                    // Vice-Coordenadores
+                    row.RelativeColumn().Border(1).BorderColor("#21808D").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Vice-Coordenadores")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text((payload.summary.TryGetValue("totalViceCoordinators", out var tvc) ? tvc : 0)?.ToString() ?? "0")
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#21808D");
+                    });
+                });
+
+                // Segunda linha com pendências
+                column.Item().PaddingTop(10).Row(row =>
+                {
+                    // Espaços sem coordenador
+                    row.RelativeColumn().Border(1).BorderColor("#C01530").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Sem Coordenador")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text((payload.summary.TryGetValue("spacesWithoutCoordinator", out var swc) ? swc : 0)?.ToString() ?? "0")
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#C01530");
+                    });
+
+                    row.Spacing(10);
+
+                    // Espaços sem vice
+                    row.RelativeColumn().Border(1).BorderColor("#A84B2F").Padding(12).Column(col =>
+                    {
+                        col.Item().Text("Sem Vice-Coordenador")
+                            .FontSize(9)
+                            .FontColor("#626C71");
+                        col.Item().Text((payload.summary.TryGetValue("spacesWithoutVice", out var swv) ? swv : 0)?.ToString() ?? "0")
+                            .FontSize(20)
+                            .Bold()
+                            .FontColor("#A84B2F");
+                    });
+
+                    row.Spacing(10);
+                    row.RelativeColumn(); // Espaço vazio
+                });
+            });
+
+            // FOOTER PADRÃO
+            page.Footer().Column(col =>
+            {
+                col.Item()
+                    .PaddingTop(8)
+                    .PaddingBottom(8)
+                    .BorderTop(1)
+                    .BorderColor("#DDDDDD");
+
+                col.Item().Row(row =>
+                {
+                    row.RelativeColumn(2)
+                        .AlignLeft()
+                        .Text("SAMGestor - Coordenadores das Equipes de Serviço")
+                        .FontSize(8)
+                        .FontColor("#666666");
+
+                    row.RelativeColumn(1)
+                        .AlignRight()
+                        .Text($"Página {pageNum}")
+                        .FontSize(8)
+                        .FontColor("#666666");
+                });
+            });
+        });
+
+    }).GeneratePdf();
+
+    var fileName = $"Relatorio_Coordenadores_Servico_{retreatName.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}";
+    return ("application/pdf", $"{fileName}.pdf", pdfBytes);
+}
+
 
   
     // ========== PDF GENÉRICO (Fallback) ==========
