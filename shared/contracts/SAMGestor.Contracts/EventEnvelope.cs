@@ -27,6 +27,12 @@ public static class EventTypes
     public const string EmailChangedByAdminV1 = "user.email.changed.by.admin.v1";
     public const string EmailChangedNotificationV1 = "user.email.changed.notification.v1";
     public const string PasswordChangedByAdminV1 = "user.password.changed.by.admin.v1";
+    
+    public const string CustomNotificationToUsersRequestedV1 = "custom.notification.to.users.requested.v1";
+    public const string CustomNotificationToModuleRequestedV1 = "custom.notification.to.module.requested.v1";
+    public const string CustomNotificationToAdminsRequestedV1 = "custom.notification.to.admins.requested.v1";
+    public const string CustomNotificationSentV1 = "custom.notification.sent.v1";
+    public const string CustomNotificationFailedV1 = "custom.notification.failed.v1";
 
 }
 
