@@ -1,4 +1,5 @@
 using SAMGestor.Domain.Entities;
+using SAMGestor.Domain.Enums;
 using SAMGestor.Domain.ValueObjects;
 
 namespace SAMGestor.Domain.Interfaces;
@@ -17,4 +18,8 @@ public interface IServiceRegistrationRepository
     Task<ServiceRegistration?> GetByIdForUpdateAsync(Guid id, CancellationToken ct = default);
     Task UpdateAsync(ServiceRegistration serviceRegistration, CancellationToken ct = default);
     Task<int> CountByRetreatAsync(Guid retreatId, CancellationToken ct = default);
+    Task<List<(Guid Id, string Name, string Email)>> GetRecipientsForNotificationAsync(
+        Guid retreatId, 
+        List<ServiceRegistrationStatus>? statusFilter,
+        CancellationToken ct);
 }

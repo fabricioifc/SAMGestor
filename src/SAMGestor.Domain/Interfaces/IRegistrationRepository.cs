@@ -65,4 +65,9 @@ public interface IRegistrationRepository
     Task UpdateAsync(Registration registration, CancellationToken ct = default);
     
     Task<int> CountByRetreatAsync(Guid retreatId, CancellationToken ct = default);
+    
+    Task<List<(Guid Id, string Name, string Email)>> GetRecipientsForNotificationAsync(
+        Guid retreatId, 
+        List<RegistrationStatus>? statusFilter,
+        CancellationToken ct);
 }

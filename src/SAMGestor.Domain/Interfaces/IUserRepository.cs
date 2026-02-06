@@ -1,4 +1,5 @@
 using SAMGestor.Domain.Entities;
+using SAMGestor.Domain.Enums;
 
 namespace SAMGestor.Domain.Interfaces;
 
@@ -16,4 +17,8 @@ public interface IUserRepository
         int take, 
         string? search, 
         CancellationToken ct = default);
+    
+    Task<List<(Guid Id, string Name, string Email)>> GetUsersByRolesAsync(
+        UserRole[] roles,
+        CancellationToken ct);
 }
