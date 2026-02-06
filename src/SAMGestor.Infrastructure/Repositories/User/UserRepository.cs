@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SAMGestor.Application.Common.Pagination;
+using SAMGestor.Domain.Enums;
 using SAMGestor.Domain.Interfaces;
 using SAMGestor.Infrastructure.Persistence;
 
@@ -63,5 +64,20 @@ public sealed class UserRepository : IUserRepository
     {
         return await _db.Users
             .FirstOrDefaultAsync(u => u.Id == id, ct);
+    }
+    
+    public async Task<List<(Guid Id, string Name, string Email)>> GetUsersByRolesAsync(
+        UserRole[] roles,
+        CancellationToken ct)
+    {
+        return await _db.Users
+            .AsNoTracking()
+            .Where(u => roles.Contains(u.Role) && u.Enabled)
+            .Select(u => new ValueTuple<Guid, string, string>(
+                u.Id,
+                u.Name.Value,
+                u.Email.Value
+            ))
+            .ToListAsync(ct);
     }
 }

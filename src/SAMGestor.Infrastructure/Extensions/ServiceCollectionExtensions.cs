@@ -135,8 +135,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJwtTokenDecoder, JwtTokenDecoder>();
         services.AddScoped<IRawSqlExecutor, RawSqlExecutor>();
         services.AddScoped<IManualPaymentProofRepository, ManualPaymentProofRepository>();
-      
-
+        services.AddScoped<ICustomNotificationRepository, CustomNotificationRepository>();
+        
        
 
         services.AddHttpClient<IImageFetcher, HttpImageFetcher>(client =>

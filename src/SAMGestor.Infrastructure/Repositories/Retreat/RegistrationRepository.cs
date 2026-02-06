@@ -196,5 +196,29 @@ namespace SAMGestor.Infrastructure.Repositories.Retreat
                 .Where(r => r.RetreatId == retreatId)
                 .CountAsync(ct);
         }
+        
+        public async Task<List<(Guid Id, string Name, string Email)>> GetRecipientsForNotificationAsync(
+            Guid retreatId,
+            List<RegistrationStatus>? statusFilter,
+            CancellationToken ct)
+        {
+            var query = _ctx.Registrations
+                .AsNoTracking()
+                .Where(r => r.RetreatId == retreatId && r.Enabled);
+
+          
+            if (statusFilter != null && statusFilter.Any())
+            {
+                query = query.Where(r => statusFilter.Contains(r.Status));
+            }
+
+            return await query
+                .Select(r => new ValueTuple<Guid, string, string>(
+                    r.Id,
+                    r.Name.Value,
+                    r.Email.Value
+                ))
+                .ToListAsync(ct);
+        }
     }
 }

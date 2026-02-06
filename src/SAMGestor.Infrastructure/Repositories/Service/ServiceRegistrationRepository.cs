@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SAMGestor.Domain.Entities;
+using SAMGestor.Domain.Enums;
 using SAMGestor.Domain.Interfaces;
 using SAMGestor.Domain.ValueObjects;
 using SAMGestor.Infrastructure.Persistence;
@@ -92,5 +93,28 @@ public sealed class ServiceRegistrationRepository(SAMContext db) : IServiceRegis
         return await db.ServiceRegistrations
             .Where(sr => sr.RetreatId == retreatId)
             .CountAsync(ct);
+    }
+    
+    public async Task<List<(Guid Id, string Name, string Email)>> GetRecipientsForNotificationAsync(
+        Guid retreatId,
+        List<ServiceRegistrationStatus>? statusFilter,
+        CancellationToken ct)
+    {
+        var query = db.ServiceRegistrations
+            .AsNoTracking()
+            .Where(s => s.RetreatId == retreatId && s.Enabled);
+        
+        if (statusFilter != null && statusFilter.Any())
+        {
+            query = query.Where(s => statusFilter.Contains(s.Status));
+        }
+
+        return await query
+            .Select(s => new ValueTuple<Guid, string, string>(
+                s.Id,
+                s.Name.Value,
+                s.Email.Value
+            ))
+            .ToListAsync(ct);
     }
 }

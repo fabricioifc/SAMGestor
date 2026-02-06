@@ -34,6 +34,8 @@ public class SAMContext(DbContextOptions<SAMContext> options) : DbContext(option
     public DbSet<EmailConfirmationToken> EmailConfirmationTokens => Set<EmailConfirmationToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<ManualPaymentProof> ManualPaymentProofs => Set<ManualPaymentProof>();
+    public DbSet<CustomNotification> CustomNotifications => Set<CustomNotification>();
+
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
