@@ -48,6 +48,9 @@ builder.Services.AddHostedService<EmailChangedByAdminConsumer>();
 builder.Services.AddHostedService<EmailChangedNotificationConsumer>();
 builder.Services.AddHostedService<PasswordChangedByAdminConsumer>();
 builder.Services.AddHostedService<ManualPaymentConfirmedConsumer>();
+builder.Services.AddHostedService<CustomNotificationToUsersConsumer>();
+builder.Services.AddHostedService<CustomNotificationToModuleConsumer>();
+builder.Services.AddHostedService<CustomNotificationToAdminsConsumer>();
     
 
 builder.Services.AddEndpointsApiExplorer();
