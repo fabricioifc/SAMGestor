@@ -16,14 +16,17 @@ public sealed class RefreshTokenRepository : IRefreshTokenRepository
     public Task<RefreshToken?> GetByHashAsync(Guid userId, string tokenHash, CancellationToken ct = default)
         => _db.RefreshTokens.FirstOrDefaultAsync(t => t.UserId == userId && t.TokenHash == tokenHash, ct);
     
-    public async Task<RefreshToken?> GetByHashWithLockAsync(Guid userId, string tokenHash, CancellationToken ct = default)
+    public async Task<RefreshToken?> GetByHashWithLockAsync(
+        Guid userId,
+        string tokenHash,
+        CancellationToken ct = default)
     {
         return await _db.RefreshTokens
             .FromSqlRaw(@"
-                SELECT * FROM refresh_tokens 
-                WHERE user_id = {0} AND token_hash = {1}
-                FOR UPDATE
-            ", userId, tokenHash)
+            SELECT * FROM core.refresh_tokens
+            WHERE user_id = {0} AND token_hash = {1}
+            FOR UPDATE
+        ", userId, tokenHash)
             .FirstOrDefaultAsync(ct);
     }
     
