@@ -1,6 +1,6 @@
 # Modelagem do Sistema SAMGestor
 
-## 5.1 Atores do Sistema
+## Atores do Sistema
 
 O sistema SAMGestor foi desenvolvido para atender diferentes perfis de usuários, cada um com permissões e responsabilidades específicas:
 
@@ -11,7 +11,7 @@ O sistema SAMGestor foi desenvolvido para atender diferentes perfis de usuários
 | **Consultor (Consultant)** | Usuário com acesso somente leitura para consulta de informações | Visualizar retiros, inscrições, famílias, equipes, barracas e relatórios (sem permissões de edição ou exclusão) |
 | **Participante** | Pessoa que realizou inscrição no sistema através do formulário público | Preencher formulário de inscrição, visualizar status da inscrição, realizar pagamento via link recebido por email |
 
-## 5.2 Requisitos Funcionais
+## Requisitos Funcionais
 
 Os requisitos funcionais implementados no sistema SAMGestor foram organizados por serviço responsável:
 
@@ -58,7 +58,7 @@ Os requisitos funcionais implementados no sistema SAMGestor foram organizados po
 | RF039 | Todos os serviços processaram eventos via Outbox Pattern com garantia de entrega | Todos | Implementado |
 | RF040 | Todos os serviços implementaram consumidores de eventos com idempotência | Todos | Implementado |
 
-## 5.3 Requisitos Não Funcionais
+## Requisitos Não Funcionais
 
 Os requisitos não funcionais implementados garantiram qualidade, escalabilidade e manutenibilidade do sistema:
 
@@ -92,7 +92,7 @@ Os requisitos não funcionais implementados garantiram qualidade, escalabilidade
 | RNF026 | O sistema implementou idempotência nos consumidores de eventos | Consumidores verificam duplicatas por RegistrationId/PaymentId antes de processar; operações são seguras para reprocessamento |
 | RNF027 | O sistema implementou políticas de retry configuráveis | Outbox dispatcher tenta reenviar mensagens falhadas com incremento de contador de tentativas e registro de último erro |
 
-## 5.4 Regras de Negócio
+## Regras de Negócio
 
 As regras de negócio implementadas no sistema foram distribuídas entre os serviços conforme suas responsabilidades:
 
@@ -133,15 +133,15 @@ As regras de negócio implementadas no sistema foram distribuídas entre os serv
 | RN033 | Convites de grupo foram enviados apenas para membros com telefone válido | Notification | Implementado |
 | RN034 | Eventos de domínio foram processados exatamente uma vez (idempotência) | Todos | Implementado |
 
-## 5.5 Modelagem de Domínio
+##  Modelagem de Domínio
 
-### 5.5.1 Modelo Entidade-Relacionamento Geral
+### Modelo Entidade-Relacionamento Geral
 
 O sistema SAMGestor utilizou um modelo de dados relacional implementado com Entity Framework Core. O schema principal (`core`) contém as entidades de domínio do serviço Core, que gerencia retiros, inscrições, famílias, equipes e barracas.
 
 O diagrama ER completo foi gerado automaticamente pelo Entity Framework Core através das migrations e reflete a estrutura atual do banco de dados com todas as relações, chaves estrangeiras e índices implementados.
 
-### 5.5.2 Segregação por Serviço
+### Segregação por Serviço
 
 O sistema implementou o padrão **Database per Service**, onde cada microserviço possui seu próprio schema isolado no PostgreSQL. Esta abordagem garantiu autonomia dos serviços e permitiu evolução independente dos schemas.
 
@@ -197,7 +197,7 @@ O banco de dados Notification contém as entidades relacionadas a notificações
 | `notification_dispatch_logs` | Logs de tentativas de envio de notificações |
 | `selected_registrations` | Projeção de participantes selecionados (read model) |
 
-### 5.5.3 Eventos de Domínio e Outbox
+### Eventos de Domínio e Outbox
 
 #### Estrutura da Tabela OutboxMessage
 
