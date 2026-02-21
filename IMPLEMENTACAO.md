@@ -219,197 +219,21 @@ O SAMGestor utiliza diversos Value Objects para garantir validação e encapsula
 
 A entidade `Registration` é um dos principais Aggregates do sistema, representando a inscrição de um participante em um retiro. Ela encapsula todas as regras de negócio relacionadas ao ciclo de vida de uma inscrição.
 
-```csharp
-using SAMGestor.Domain.Common;
-using SAMGestor.Domain.Enums;
-using SAMGestor.Domain.ValueObjects;
+A classe `Registration` implementa:
+- **Propriedades com Value Objects**: Name, Cpf, Email para garantir validação
+- **Dados do retiro**: RetreatId, Status (NotSelected, Selected, PaymentConfirmed, Confirmed, Canceled)
+- **Dados adicionais**: PhotoUrl, TentId, TeamId, CompletedRetreat
+- **Dados de saúde**: HasAllergies, HasMedicalRestriction com detalhes
+- **Consentimentos**: TermsAccepted, TermsAcceptedAt, TermsVersion, MarketingOptIn
 
-namespace SAMGestor.Domain.Entities;
-
-/// <summary>
-/// Aggregate Root: Representa a inscrição de um participante em um retiro.
-/// Encapsula regras de negócio e garante consistência dos dados.
-/// </summary>
-public class Registration : Entity<Guid>
-{
-    // ========== PROPRIEDADES (com Value Objects) ==========
-    
-    // Dados pessoais (Value Objects garantem validação)
-    public FullName Name { get; private set; }           // Nome completo validado
-    public CPF Cpf { get; private set; }                 // CPF validado
-    public EmailAddress Email { get; private set; }      // Email validado
-    public string Phone { get; private set; }
-    public DateOnly BirthDate { get; private set; }
-    public Gender Gender { get; private set; }
-    public string City { get; private set; }
-    
-    // Dados do retiro
-    public Guid RetreatId { get; private set; }
-    public RegistrationStatus Status { get; private set; }  // NotSelected, Selected, PaymentConfirmed, Confirmed, Canceled
-    public bool Enabled { get; private set; }
-    public DateTime RegistrationDate { get; private set; }
-    
-    // Dados adicionais
-    public UrlAddress? PhotoUrl { get; private set; }
-    public Guid? TentId { get; private set; }             // Barraca atribuída
-    public Guid? TeamId { get; private set; }             // Equipe atribuída
-    public bool CompletedRetreat { get; private set; }
-    
-    // Dados de saúde
-    public bool? HasAllergies { get; private set; }
-    public string? AllergiesDetails { get; private set; }
-    public bool? HasMedicalRestriction { get; private set; }
-    public string? MedicalRestrictionDetails { get; private set; }
-    
-    // Consentimentos
-    public bool TermsAccepted { get; private set; }
-    public DateTime? TermsAcceptedAt { get; private set; }
-    public string? TermsVersion { get; private set; }
-    public bool MarketingOptIn { get; private set; }
-    
-    // ========== CONSTRUTOR (Factory Method) ==========
-    
-    /// <summary>
-    /// Cria uma nova inscrição com validações iniciais.
-    /// Status inicial: NotSelected (aguardando sorteio)
-    /// </summary>
-    public Registration(
-        FullName name,
-        CPF cpf,
-        EmailAddress email,
-        string phone,
-        DateOnly birthDate,
-        Gender gender,
-        string city,
-        RegistrationStatus status,
-        Guid retreatId)
-    {
-        // Gera ID único
-        Id = Guid.NewGuid();
-        
-        // Atribui Value Objects (já validados em seus construtores)
-        Name = name;
-        Cpf = cpf;
-        Email = email;
-        
-        // Dados primitivos com normalização
-        Phone = phone.Trim();
-        BirthDate = birthDate;
-        Gender = gender;
-        City = city.Trim();
-        
-        // Estado inicial
-        Status = status;
-        Enabled = true;
-        RetreatId = retreatId;
-        CompletedRetreat = false;
-        RegistrationDate = DateTime.UtcNow;
-        
-        // Consentimentos iniciais
-        TermsAccepted = false;
-        MarketingOptIn = false;
-    }
-    
-    // Construtor privado para EF Core
-    private Registration() { }
-    
-    // ========== MÉTODOS DE DOMÍNIO ==========
-    
-    /// <summary>
-    /// Aceita os termos de uso e política de privacidade.
-    /// Regra: Versão/hash da política é obrigatório para auditoria.
-    /// </summary>
-    public void AcceptTerms(string versionOrHash, DateTime acceptedAtUtc)
-    {
-        if (string.IsNullOrWhiteSpace(versionOrHash))
-            throw new ArgumentException("Versão/identificador da política é obrigatório.", nameof(versionOrHash));
-            
-        TermsAccepted = true;
-        TermsAcceptedAt = acceptedAtUtc;
-        TermsVersion = versionOrHash.Trim();
-    }
-    
-    /// <summary>
-    /// Define opt-in para comunicações de marketing.
-    /// </summary>
-    public void SetMarketingOptIn(bool optIn, DateTime timestamp)
-    {
-        MarketingOptIn = optIn;
-        // Poderia registrar timestamp em propriedade específica se necessário
-    }
-    
-    /// <summary>
-    /// Atualiza o status da inscrição.
-    /// Regra: Não permite rebaixar status de Confirmed para anterior.
-    /// </summary>
-    public void SetStatus(RegistrationStatus newStatus)
-    {
-        Status = newStatus;
-    }
-    
-    /// <summary>
-    /// Marca inscrição como confirmada (após pagamento ou aprovação manual).
-    /// Regra: Não altera se já estiver cancelada.
-    /// </summary>
-    public void MarkConfirmed()
-    {
-        if (Status == RegistrationStatus.Canceled) 
-            return;
-            
-        Status = RegistrationStatus.Confirmed;
-    }
-    
-    /// <summary>
-    /// Define informações de alergias.
-    /// </summary>
-    public void SetAllergies(bool? hasAllergies, string? details)
-    {
-        HasAllergies = hasAllergies;
-        AllergiesDetails = string.IsNullOrWhiteSpace(details) ? null : details.Trim();
-    }
-    
-    /// <summary>
-    /// Define restrições médicas.
-    /// </summary>
-    public void SetMedicalRestriction(bool? hasRestriction, string? details)
-    {
-        HasMedicalRestriction = hasRestriction;
-        MedicalRestrictionDetails = string.IsNullOrWhiteSpace(details) ? null : details.Trim();
-    }
-    
-    /// <summary>
-    /// Desabilita a inscrição (soft delete).
-    /// </summary>
-    public void Disable() => Enabled = false;
-    
-    /// <summary>
-    /// Marca que o participante completou o retiro.
-    /// </summary>
-    public void CompleteRetreat() => CompletedRetreat = true;
-    
-    /// <summary>
-    /// Verifica se a inscrição é elegível para atribuição de barraca.
-    /// Regra: Deve estar habilitada e com pagamento confirmado ou confirmada manualmente.
-    /// </summary>
-    public bool IsEligibleForTent() =>
-        Enabled && (Status == RegistrationStatus.PaymentConfirmed || Status == RegistrationStatus.Confirmed);
-    
-    /// <summary>
-    /// Calcula a idade do participante em uma data específica.
-    /// Útil para validações de idade mínima/máxima.
-    /// </summary>
-    public int GetAgeOn(DateOnly onDate)
-    {
-        int age = onDate.Year - BirthDate.Year;
-        
-        // Ajusta se ainda não fez aniversário no ano
-        if (new DateOnly(onDate.Year, BirthDate.Month, BirthDate.Day) > onDate)
-            age--;
-            
-        return age;
-    }
-}
-```
+**Métodos principais**:
+- `AcceptTerms()`: Registra aceitação de termos com versão para auditoria
+- `SetMarketingOptIn()`: Define preferência de comunicações de marketing
+- `SetStatus()`: Atualiza status da inscrição
+- `MarkConfirmed()`: Marca como confirmada após pagamento
+- `SetAllergies()` e `SetMedicalRestriction()`: Registram informações de saúde
+- `IsEligibleForTent()`: Verifica elegibilidade para atribuição de barraca
+- `GetAgeOn()`: Calcula idade em data específica
 
 ### Eventos de Domínio
 
@@ -441,290 +265,67 @@ Este exemplo demonstra um fluxo completo de criação de inscrição, incluindo 
 
 #### 1. Command (Contrato de Entrada)
 
-```csharp
-using MediatR;
-using SAMGestor.Domain.Enums;
-using SAMGestor.Domain.ValueObjects;
+O `CreateRegistrationCommand` é um record que implementa `IRequest<CreateRegistrationResponse>` do MediatR. Contém:
 
-namespace SAMGestor.Application.Features.Registrations.Create;
+**Dados do retiro**: RetreatId
 
-/// <summary>
-/// Command para criar uma nova inscrição de participante.
-/// Implementa IRequest<TResponse> do MediatR para ser processado por um Handler.
-/// </summary>
-public sealed record CreateRegistrationCommand(
-    // Dados do retiro
-    Guid RetreatId,
+**Dados pessoais** (Value Objects): Name, Cpf, Email, Phone, BirthDate, Gender, City
 
-    // Dados pessoais (Value Objects garantem validação)
-    FullName Name,
-    CPF Cpf,
-    EmailAddress Email,
-    string Phone,
-    DateOnly BirthDate,
-    Gender Gender,
-    string City,
+**Dados adicionais**: MaritalStatus, Pregnancy, ShirtSize, WeightKg, HeightCm, Profession, StreetAndNumber, Neighborhood, State
 
-    // Dados adicionais
-    MaritalStatus MaritalStatus,
-    PregnancyStatus Pregnancy,
-    ShirtSize ShirtSize,
-    decimal WeightKg,
-    decimal HeightCm,
-    string Profession,
-    string StreetAndNumber,
-    string Neighborhood,
-    UF State,
+**Contatos alternativos**: Whatsapp, FacebookUsername, InstagramHandle, NeighborPhone, RelativePhone
 
-    // Contatos alternativos
-    string? Whatsapp,
-    string? FacebookUsername,
-    string? InstagramHandle,
-    string NeighborPhone,
-    string RelativePhone,
+**Dados de saúde**: AlcoholUse, Smoker, UsesDrugs, DrugUseFrequency, HasAllergies, AllergiesDetails, HasMedicalRestriction, MedicalRestrictionDetails, TakesMedication, MedicationsDetails, PhysicalLimitationDetails, RecentSurgeryOrProcedureDetails
 
-    // Dados de saúde
-    AlcoholUsePattern AlcoholUse,
-    bool Smoker,
-    bool? UsesDrugs,
-    string? DrugUseFrequency,
-    bool? HasAllergies,
-    string? AllergiesDetails,
-    bool? HasMedicalRestriction,
-    string? MedicalRestrictionDetails,
-    bool? TakesMedication,
-    string? MedicationsDetails,
-    string? PhysicalLimitationDetails,
-    string? RecentSurgeryOrProcedureDetails,
+**Consentimentos**: TermsAccepted, TermsVersion, MarketingOptIn
 
-    // Consentimentos (obrigatórios)
-    bool TermsAccepted,
-    string TermsVersion,
-    bool? MarketingOptIn,
+**Contexto**: ClientIp, UserAgent
 
-    // Contexto da requisição (preenchido pelo controller)
-    string? ClientIp = null,
-    string? UserAgent = null
-) : IRequest<CreateRegistrationResponse>;
-
-/// <summary>
-/// DTO de resposta após criação bem-sucedida.
-/// </summary>
-public sealed record CreateRegistrationResponse(
-    Guid RegistrationId,
-    string Message = "Registration created successfully"
-);
-```
+A resposta `CreateRegistrationResponse` retorna o RegistrationId gerado e uma mensagem de sucesso.
 
 #### 2. Handler (Lógica de Aplicação)
 
-```csharp
-using MediatR;
-using SAMGestor.Domain.Entities;
-using SAMGestor.Domain.Enums;
-using SAMGestor.Domain.Exceptions;
-using SAMGestor.Domain.Interfaces;
-using SAMGestor.Application.Interfaces;
+O `CreateRegistrationHandler` implementa `IRequestHandler<CreateRegistrationCommand, CreateRegistrationResponse>` e executa:
 
-namespace SAMGestor.Application.Features.Registrations.Create;
+**1. Validação do Retiro**: Verifica existência e se a janela de inscrições está aberta
 
-/// <summary>
-/// Handler responsável por processar o comando de criação de inscrição.
-/// Aplica regras de negócio e coordena operações com repositórios.
-/// </summary>
-public sealed class CreateRegistrationHandler(
-    IRegistrationRepository regRepo,
-    IRetreatRepository retRepo,
-    IUnitOfWork uow
-) : IRequestHandler<CreateRegistrationCommand, CreateRegistrationResponse>
-{
-    public async Task<CreateRegistrationResponse> Handle(
-        CreateRegistrationCommand cmd,
-        CancellationToken ct)
-    {
-        // ========== 1. VALIDAÇÃO DO RETIRO ==========
+**2. Regras de Unicidade e Bloqueio**: Valida se CPF está bloqueado ou já inscrito neste retiro
 
-        // Verifica se o retiro existe
-        var retreat = await retRepo.GetByIdAsync(cmd.RetreatId, ct);
-        if (retreat is null)
-            throw new NotFoundException(nameof(Retreat), cmd.RetreatId);
+**3. Criação da Entidade**: Instancia `Registration` com status inicial `NotSelected`
 
-        // Verifica se a janela de inscrições está aberta
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        if (!retreat.RegistrationWindowOpen(today))
-            throw new BusinessRuleException("Registration period closed.");
+**4. Enriquecimento de Dados**: Popula dados pessoais, endereço, contatos alternativos e informações de saúde através de métodos específicos
 
-        // ========== 2. REGRAS DE UNICIDADE E BLOQUEIO ==========
+**5. Consentimentos**: Valida aceitação de termos e registra opt-in de marketing
 
-        // Verifica se o CPF está bloqueado (lista negra)
-        if (await regRepo.IsCpfBlockedAsync(cmd.Cpf, ct))
-            throw new BusinessRuleException("CPF is blocked.");
+**6. Persistência**: Adiciona ao repositório e salva via Unit of Work (garante transação)
 
-        // Verifica se já existe inscrição com este CPF neste retiro
-        if (await regRepo.ExistsByCpfInRetreatAsync(cmd.Cpf, cmd.RetreatId, ct))
-            throw new BusinessRuleException("CPF already registered for this retreat.");
+**7. Retorno**: Retorna RegistrationId gerado
 
-        // ========== 3. CRIAÇÃO DA ENTIDADE DE DOMÍNIO ==========
-
-        // Cria a entidade Registration com status inicial NotSelected
-        var reg = new Registration(
-            cmd.Name,
-            cmd.Cpf,
-            cmd.Email,
-            cmd.Phone,
-            cmd.BirthDate,
-            cmd.Gender,
-            cmd.City,
-            RegistrationStatus.NotSelected,  // Status inicial: aguardando sorteio
-            cmd.RetreatId
-        );
-
-        // ========== 4. ENRIQUECIMENTO COM DADOS ADICIONAIS ==========
-
-        // Dados pessoais complementares
-        reg.SetPersonalInfo(
-            cmd.MaritalStatus,
-            cmd.Pregnancy,
-            cmd.ShirtSize,
-            cmd.WeightKg,
-            cmd.HeightCm,
-            cmd.Profession
-        );
-
-        // Endereço
-        reg.SetAddress(
-            cmd.StreetAndNumber,
-            cmd.Neighborhood,
-            cmd.City,
-            cmd.State
-        );
-
-        // Contatos alternativos
-        reg.SetAlternativeContacts(
-            cmd.Whatsapp,
-            cmd.FacebookUsername,
-            cmd.InstagramHandle,
-            cmd.NeighborPhone,
-            cmd.RelativePhone
-        );
-
-        // Dados de saúde
-        reg.SetAlcoholUse(cmd.AlcoholUse);
-        reg.SetSmoker(cmd.Smoker);
-        reg.SetDrugUse(cmd.UsesDrugs, cmd.DrugUseFrequency);
-        reg.SetAllergies(cmd.HasAllergies, cmd.AllergiesDetails);
-        reg.SetMedicalRestriction(cmd.HasMedicalRestriction, cmd.MedicalRestrictionDetails);
-        reg.SetMedications(cmd.TakesMedication, cmd.MedicationsDetails);
-        reg.SetPhysicalLimitationDetails(cmd.PhysicalLimitationDetails);
-        reg.SetRecentSurgeryOrProcedureDetails(cmd.RecentSurgeryOrProcedureDetails);
-
-        // ========== 5. CONSENTIMENTOS (OBRIGATÓRIOS) ==========
-
-        // Valida que os termos foram aceitos
-        if (!cmd.TermsAccepted)
-            throw new BusinessRuleException("Terms must be accepted.");
-
-        reg.AcceptTerms(cmd.TermsVersion, DateTime.UtcNow);
-        reg.SetMarketingOptIn(cmd.MarketingOptIn ?? false, DateTime.UtcNow);
-
-        // Registra contexto da requisição (IP e User-Agent para auditoria)
-        reg.SetClientContext(cmd.ClientIp, cmd.UserAgent);
-
-        // ========== 6. PERSISTÊNCIA ==========
-
-        // Adiciona ao repositório
-        await regRepo.AddAsync(reg, ct);
-
-        // Salva mudanças (Unit of Work garante transação)
-        await uow.SaveChangesAsync(ct);
-
-        // ========== 7. RETORNO ==========
-
-        return new CreateRegistrationResponse(reg.Id);
-    }
-}
-```
+O handler injeta `IRegistrationRepository`, `IRetreatRepository` e `IUnitOfWork` via constructor injection.
 
 #### 3. Validator (Validação com FluentValidation)
 
-```csharp
-using FluentValidation;
-using SAMGestor.Domain.Enums;
+O `CreateRegistrationValidator` estende `AbstractValidator<CreateRegistrationCommand>` e é executado automaticamente pelo `ValidationBehavior` antes do Handler.
 
-namespace SAMGestor.Application.Features.Registrations.Create;
+**Validações implementadas**:
 
-/// <summary>
-/// Validador para CreateRegistrationCommand.
-/// Executado automaticamente pelo ValidationBehavior antes do Handler.
-/// </summary>
-public class CreateRegistrationValidator : AbstractValidator<CreateRegistrationCommand>
-{
-    public CreateRegistrationValidator()
-    {
-        // ========== VALIDAÇÕES DE RETIRO ==========
+**Retiro**: RetreatId obrigatório
 
-        RuleFor(x => x.RetreatId)
-            .NotEmpty()
-            .WithMessage("Retreat ID is required.");
+**Dados Pessoais**:
+- Name: obrigatório, máximo 120 caracteres
+- Cpf: obrigatório
+- Email: obrigatório
+- Phone: obrigatório, máximo 20 caracteres
+- BirthDate: deve estar no passado
+- City: obrigatório, máximo 80 caracteres
 
-        // ========== VALIDAÇÕES DE DADOS PESSOAIS ==========
+**Dados Físicos**:
+- WeightKg: entre 0 e 300 kg
+- HeightCm: entre 0 e 250 cm
 
-        RuleFor(x => x.Name)
-            .NotNull()
-            .WithMessage("Name is required.");
-
-        RuleFor(x => x.Name.Value)
-            .NotEmpty()
-            .MaximumLength(120)
-            .WithMessage("Name must be between 1 and 120 characters.");
-
-        RuleFor(x => x.Cpf)
-            .NotNull()
-            .WithMessage("CPF is required.");
-
-        RuleFor(x => x.Email)
-            .NotNull()
-            .WithMessage("Email is required.");
-
-        RuleFor(x => x.Phone)
-            .NotEmpty()
-            .MaximumLength(20)
-            .WithMessage("Phone is required and must be at most 20 characters.");
-
-        RuleFor(x => x.BirthDate)
-            .LessThan(DateOnly.FromDateTime(DateTime.UtcNow))
-            .WithMessage("Birth date must be in the past.");
-
-        RuleFor(x => x.City)
-            .NotEmpty()
-            .MaximumLength(80)
-            .WithMessage("City is required and must be at most 80 characters.");
-
-        // ========== VALIDAÇÕES DE DADOS FÍSICOS ==========
-
-        RuleFor(x => x.WeightKg)
-            .GreaterThan(0)
-            .LessThanOrEqualTo(300)
-            .WithMessage("Weight must be between 0 and 300 kg.");
-
-        RuleFor(x => x.HeightCm)
-            .GreaterThan(0)
-            .LessThanOrEqualTo(250)
-            .WithMessage("Height must be between 0 and 250 cm.");
-
-        // ========== VALIDAÇÕES DE CONSENTIMENTO ==========
-
-        RuleFor(x => x.TermsAccepted)
-            .Equal(true)
-            .WithMessage("Terms must be accepted.");
-
-        RuleFor(x => x.TermsVersion)
-            .NotEmpty()
-            .When(x => x.TermsAccepted)
-            .WithMessage("Terms version is required when terms are accepted.");
-    }
-}
-```
+**Consentimento**:
+- TermsAccepted: deve ser true
+- TermsVersion: obrigatório quando termos são aceitos
 
 ### Pipeline Behaviors Implementados
 
@@ -732,66 +333,23 @@ O sistema utiliza Pipeline Behaviors do MediatR para aplicar cross-cutting conce
 
 #### ValidationBehavior
 
-Executa validações FluentValidation automaticamente antes de cada Handler:
+O `ValidationBehavior<TRequest, TResponse>` implementa `IPipelineBehavior<TRequest, TResponse>` e executa validações FluentValidation automaticamente antes de cada Handler.
 
-```csharp
-using FluentValidation;
-using MediatR;
+**Funcionamento**:
+1. Verifica se há validadores registrados para o request
+2. Cria contexto de validação
+3. Executa todos os validadores em paralelo
+4. Coleta todos os erros encontrados
+5. Se há erros, lança `ValidationException` (capturada pelo `ExceptionHandlingMiddleware`)
+6. Se sem erros, prossegue para o próximo behavior ou handler
 
-/// <summary>
-/// Pipeline Behavior que executa validações FluentValidation automaticamente.
-/// Lança ValidationException se houver erros, interrompendo o pipeline.
-/// </summary>
-public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
-    where TRequest : notnull, IRequest<TResponse>
-{
-    private readonly IEnumerable<IValidator<TRequest>> _validators;
-
-    public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators)
-        => _validators = validators;
-
-    public async Task<TResponse> Handle(
-        TRequest request,
-        RequestHandlerDelegate<TResponse> next,
-        CancellationToken cancellationToken)
-    {
-        // Se não há validadores registrados, prossegue
-        if (!_validators.Any())
-            return await next();
-
-        // Cria contexto de validação
-        var context = new ValidationContext<TRequest>(request);
-
-        // Executa todos os validadores em paralelo
-        var validationResults = await Task.WhenAll(
-            _validators.Select(v => v.ValidateAsync(context, cancellationToken))
-        );
-
-        // Coleta todos os erros
-        var failures = validationResults
-            .SelectMany(result => result.Errors)
-            .Where(f => f != null)
-            .ToList();
-
-        // Se há erros, lança exceção (capturada pelo ExceptionHandlingMiddleware)
-        if (failures.Count != 0)
-            throw new ValidationException(failures);
-
-        // Prossegue para o próximo behavior ou handler
-        return await next();
-    }
-}
+**Registro no Program.cs**:
 ```
-
-**Registro no Program.cs:**
-
-```csharp
-// Registra todos os validadores do assembly
 builder.Services.AddValidatorsFromAssemblyContaining<CreateRetreatValidator>();
-
-// Registra o ValidationBehavior para todos os requests
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 ```
+
+Isso registra todos os validadores do assembly e o ValidationBehavior para todos os requests.
 
 ### Tratamento de Exceções
 
@@ -998,16 +556,11 @@ Todos os eventos são persistidos em uma tabela `OutboxMessages` antes de serem 
 - **Idempotência**: Consumidores devem ser idempotentes para lidar com duplicatas
 
 **Configuração (appsettings.json):**
-```json
-{
-  "Outbox": {
-    "BatchSize": 50,
-    "PollIntervalSeconds": 10,
-    "UseListenNotify": false,
-    "WatchdogSeconds": 30
-  }
-}
-```
+**Configuração do Outbox**:
+- BatchSize: 50 mensagens por lote
+- PollIntervalSeconds: 10 segundos entre verificações
+- UseListenNotify: false (polling em vez de notificações)
+- WatchdogSeconds: 30 segundos para timeout
 
 ## 6.6 APIs RESTful
 
@@ -1029,16 +582,11 @@ O sistema utiliza JSON Web Tokens (JWT) para autenticação e autorização, com
 
 #### Configuração JWT (appsettings.json)
 
-```json
-{
-  "Jwt": {
-    "Issuer": "SAMGestor",
-    "Audience": "SAMGestor.WebApp",
-    "SecretKey": "sua-chave-secreta-super-segura-aqui",
-    "ExpirationMinutes": 60
-  }
-}
-```
+**Propriedades**:
+- Issuer: SAMGestor
+- Audience: SAMGestor.WebApp
+- SecretKey: Chave secreta com pelo menos 32 caracteres
+- ExpirationMinutes: 60 minutos
 
 #### Fluxo de Autenticação
 
@@ -1056,17 +604,7 @@ O sistema utiliza JSON Web Tokens (JWT) para autenticação e autorização, com
 - **AdminOnly**: Acesso total (apenas administradores)
 - **EmailConfirmed**: Requer email confirmado
 
-**Exemplo de uso em Controller:**
-
-```csharp
-[Authorize(Policy = Policies.AdminOnly)]
-[HttpPost("retreats")]
-public async Task<IActionResult> CreateRetreat(CreateRetreatCommand command)
-{
-    var result = await _mediator.Send(command);
-    return CreatedAtAction(nameof(GetById), new { id = result.RetreatId }, result);
-}
-```
+**Uso em Controller**: Controllers utilizam `[Authorize(Policy = Policies.AdminOnly)]` para proteger endpoints específicos.
 
 ### Principais Endpoints por Serviço
 
@@ -1155,18 +693,7 @@ A documentação inclui:
 
 **Configuração Swagger (Program.cs):**
 
-```csharp
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// ...
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-```
+**Configuração Swagger**: No Program.cs, registra serviços de exploração de endpoints e geração de Swagger. Em desenvolvimento, ativa middleware para servir Swagger UI.
 
 ## 6.7 Integração com Serviços Externos
 
@@ -1178,46 +705,16 @@ O SAMGestor foi projetado com abstrações que facilitam a substituição de imp
 
 **MailHog** é um servidor SMTP fake que captura emails sem enviá-los, ideal para desenvolvimento e testes.
 
-**Configuração (appsettings.json):**
-```json
-{
-  "Smtp": {
-    "Host": "mailhog",
-    "Port": 1025,
-    "EnableSsl": false,
-    "FromAddress": "no-reply@samgestor.local",
-    "FromName": "SAMGestor"
-  }
-}
-```
+**Configuração (appsettings.json)**:
+- Host: mailhog
+- Port: 1025
+- EnableSsl: false
+- FromAddress: no-reply@samgestor.local
+- FromName: SAMGestor
 
 **Interface Web**: http://localhost:8025 (visualiza emails capturados)
 
-**Implementação (EmailChannel.cs):**
-```csharp
-public class EmailChannel : INotificationChannel
-{
-    private readonly SmtpOptions _options;
-
-    public async Task SendAsync(NotificationMessage message, CancellationToken ct)
-    {
-        using var client = new SmtpClient(_options.Host, _options.Port);
-        client.EnableSsl = _options.EnableSsl;
-
-        var mail = new MailMessage
-        {
-            From = new MailAddress(_options.FromAddress, _options.FromName),
-            Subject = message.Subject,
-            Body = message.Body,
-            IsBodyHtml = true
-        };
-
-        mail.To.Add(message.RecipientEmail);
-
-        await client.SendMailAsync(mail, ct);
-    }
-}
-```
+**Implementação**: A classe `EmailChannel` implementa `INotificationChannel` e utiliza `SmtpClient` para enviar emails através do MailHog.
 
 #### Migração Futura para Produção
 
@@ -1233,42 +730,13 @@ public class EmailChannel : INotificationChannel
 - Integração com SNS para notificações de bounce/complaint
 - Requer configuração de domínio (SPF, DKIM)
 
-**Abstração permite troca transparente:**
-```csharp
-// Registro condicional baseado em ambiente
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddSingleton<INotificationChannel, EmailChannel>(); // MailHog
-}
-else
-{
-    builder.Services.AddSingleton<INotificationChannel, SendGridChannel>(); // SendGrid
-}
-```
+**Abstração permite troca transparente**: Registro condicional baseado em ambiente permite usar `EmailChannel` em desenvolvimento e `SendGridChannel` em produção.
 
 ### WhatsApp: Simulado → Z-API/Twilio (Produção)
 
 #### Implementação Atual (Desenvolvimento)
 
-Atualmente, notificações via WhatsApp são apenas simuladas através de logs:
-
-```csharp
-public class WhatsAppChannelMock : INotificationChannel
-{
-    private readonly ILogger<WhatsAppChannelMock> _logger;
-
-    public Task SendAsync(NotificationMessage message, CancellationToken ct)
-    {
-        _logger.LogInformation(
-            "WhatsApp simulado enviado para {Phone}: {Message}",
-            message.RecipientPhone,
-            message.Body
-        );
-
-        return Task.CompletedTask;
-    }
-}
-```
+Atualmente, notificações via WhatsApp são apenas simuladas através de logs. A classe `WhatsAppChannelMock` implementa `INotificationChannel` e registra as mensagens no logger.
 
 #### Migração Futura para Produção
 
@@ -1284,31 +752,7 @@ public class WhatsAppChannelMock : INotificationChannel
 - Suporte global
 - Integração com outros canais (SMS, Voice)
 
-**Exemplo de implementação futura:**
-```csharp
-public class ZApiWhatsAppChannel : INotificationChannel
-{
-    private readonly HttpClient _httpClient;
-    private readonly ZApiOptions _options;
-
-    public async Task SendAsync(NotificationMessage message, CancellationToken ct)
-    {
-        var request = new
-        {
-            phone = message.RecipientPhone,
-            message = message.Body
-        };
-
-        var response = await _httpClient.PostAsJsonAsync(
-            $"{_options.BaseUrl}/send-text",
-            request,
-            ct
-        );
-
-        response.EnsureSuccessStatusCode();
-    }
-}
-```
+**Implementação futura**: A classe `ZApiWhatsAppChannel` implementaria `INotificationChannel` e faria requisições HTTP POST para a Z-API com os dados do telefone e mensagem.
 
 ### Pagamento: Fake Gateway → MercadoPago (Produção)
 
@@ -1331,132 +775,25 @@ O sistema utiliza um gateway de pagamento fake que simula o fluxo completo:
 
 **MercadoPago** é a solução de pagamentos do Mercado Livre, amplamente utilizada no Brasil.
 
-**Fluxo de Integração:**
+**Fluxo de Integração**:
 
-1. **Criação de Preferência de Pagamento**
-```csharp
-public class MercadoPagoPaymentService : IPaymentService
-{
-    private readonly HttpClient _httpClient;
-    private readonly MercadoPagoOptions _options;
+1. **Criação de Preferência de Pagamento**: A classe `MercadoPagoPaymentService` implementa `IPaymentService` e cria preferências de pagamento via API REST do MercadoPago, incluindo items, URLs de callback e referência externa.
 
-    public async Task<PaymentLinkResult> CreatePaymentLinkAsync(
-        Guid paymentId,
-        decimal amount,
-        string currency,
-        CancellationToken ct)
-    {
-        var preference = new
-        {
-            items = new[]
-            {
-                new
-                {
-                    title = "Inscrição Retiro Rahamim",
-                    quantity = 1,
-                    unit_price = amount,
-                    currency_id = currency
-                }
-            },
-            back_urls = new
-            {
-                success = $"{_options.CallbackBaseUrl}/payment/success?id={paymentId}",
-                failure = $"{_options.CallbackBaseUrl}/payment/failure?id={paymentId}",
-                pending = $"{_options.CallbackBaseUrl}/payment/pending?id={paymentId}"
-            },
-            auto_return = "approved",
-            external_reference = paymentId.ToString()
-        };
+2. **Webhook para Confirmação**: Um endpoint POST em `/webhooks/mercadopago` valida a assinatura do webhook, busca detalhes do pagamento, marca como pago e publica evento `PaymentConfirmedV1`.
 
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _options.AccessToken);
-
-        var response = await _httpClient.PostAsJsonAsync(
-            "https://api.mercadopago.com/checkout/preferences",
-            preference,
-            ct
-        );
-
-        var result = await response.Content.ReadFromJsonAsync<MercadoPagoPreferenceResponse>(ct);
-
-        return new PaymentLinkResult
-        {
-            LinkUrl = result.InitPoint,
-            PreferenceId = result.Id,
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
-        };
-    }
-}
-```
-
-2. **Webhook para Confirmação**
-```csharp
-[HttpPost("webhooks/mercadopago")]
-public async Task<IActionResult> MercadoPagoWebhook([FromBody] MercadoPagoNotification notification)
-{
-    // Valida assinatura do webhook
-    if (!ValidateSignature(notification))
-        return Unauthorized();
-
-    // Busca detalhes do pagamento
-    var paymentDetails = await _mercadoPagoClient.GetPaymentAsync(notification.Data.Id);
-
-    if (paymentDetails.Status == "approved")
-    {
-        var paymentId = Guid.Parse(paymentDetails.ExternalReference);
-
-        // Marca pagamento como confirmado
-        var payment = await _db.Payments.FindAsync(paymentId);
-        payment.MarkPaid(paymentDetails.Id.ToString(), DateTimeOffset.UtcNow);
-
-        // Publica evento
-        await _eventBus.EnqueueAsync(
-            EventTypes.PaymentConfirmedV1,
-            "sam.payment",
-            new PaymentConfirmedV1(...)
-        );
-
-        await _db.SaveChangesAsync();
-    }
-
-    return Ok();
-}
-```
-
-**Configuração (appsettings.json):**
-```json
-{
-  "MercadoPago": {
-    "AccessToken": "APP_USR-...",
-    "PublicKey": "APP_USR-...",
-    "CallbackBaseUrl": "https://samgestor.com.br",
-    "WebhookSecret": "..."
-  }
-}
-```
+**Configuração (appsettings.json)**:
+- AccessToken: Token de acesso da API
+- PublicKey: Chave pública
+- CallbackBaseUrl: URL base para callbacks
+- WebhookSecret: Secret para validação de webhooks
 
 ### Abstração de Serviços Externos
 
-Todas as integrações são abstraídas através de interfaces, permitindo substituição via Dependency Injection:
+Todas as integrações são abstraídas através de interfaces, permitindo substituição via Dependency Injection.
 
-```csharp
-// Interface
-public interface IPaymentService
-{
-    Task<PaymentLinkResult> CreatePaymentLinkAsync(...);
-    Task<PaymentDetails> GetPaymentDetailsAsync(...);
-}
+**Interface `IPaymentService`**: Define métodos `CreatePaymentLinkAsync()` e `GetPaymentDetailsAsync()`
 
-// Registro condicional
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddScoped<IPaymentService, FakePaymentService>();
-}
-else
-{
-    builder.Services.AddScoped<IPaymentService, MercadoPagoPaymentService>();
-}
-```
+**Registro condicional**: Em desenvolvimento usa `FakePaymentService`, em produção usa `MercadoPagoPaymentService`
 
 Esta abordagem garante:
 - **Testabilidade**: Mocks facilitam testes unitários
@@ -1502,226 +839,43 @@ O sistema é composto por 7 containers principais:
 
 ### Docker Compose Completo
 
-O arquivo `docker-compose.yml` define toda a infraestrutura:
+O arquivo `docker-compose.yml` define toda a infraestrutura com os seguintes serviços:
 
-```yaml
-version: '3.9'
+**Banco de Dados**: PostgreSQL 16 Alpine com healthcheck, volumes persistentes e script de inicialização
 
-services:
-  # ========== BANCO DE DADOS ==========
+**Administração**: pgAdmin 8 para gerenciamento do PostgreSQL
 
-  db:
-    image: postgres:16-alpine
-    container_name: samgestor-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: samgestor
-      POSTGRES_PASSWORD: samgestor123
-      POSTGRES_DB: samgestor
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./infra/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    networks:
-      - samgestor
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U samgestor"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+**Message Broker**: RabbitMQ 3.13 com Management UI e healthcheck
 
-  # ========== ADMINISTRAÇÃO DO BANCO ==========
+**Email (Dev)**: MailHog para captura de emails em desenvolvimento
 
-  pgadmin:
-    image: dpage/pgadmin4:8
-    container_name: samgestor-pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@samgestor.local
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - samgestor
-    depends_on:
-      - db
+**Microserviços**:
+- **Core API** (porta 5000): Build do Dockerfile, variáveis de ambiente para DB, RabbitMQ, JWT
+- **Notification API** (porta 5001): Build do Dockerfile, configuração SMTP para MailHog
+- **Payment API** (porta 5002): Build do Dockerfile, configuração de fake payment
 
-  # ========== MESSAGE BROKER ==========
+**Volumes Persistentes**: postgres_data, pgadmin_data, rabbitmq_data
 
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    container_name: samgestor-rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: samgestor
-      RABBITMQ_DEFAULT_PASS: samgestor123
-    ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - samgestor
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+**Rede**: Bridge network "samgestor" para comunicação entre containers
 
-  # ========== EMAIL (DESENVOLVIMENTO) ==========
-
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: samgestor-mailhog
-    restart: unless-stopped
-    ports:
-      - "1025:1025" # SMTP
-      - "8025:8025" # Web UI
-    networks:
-      - samgestor
-
-  # ========== MICROSERVIÇO: CORE ==========
-
-  coreapi:
-    build:
-      context: .
-      dockerfile: src/SAMGestor.API/Dockerfile
-    container_name: samgestor-core-api
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5000
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=samgestor;Username=samgestor;Password=samgestor123;Include Error Detail=true"
-      RabbitMQ__Host: rabbitmq
-      RabbitMQ__Port: 5672
-      RabbitMQ__Username: samgestor
-      RabbitMQ__Password: samgestor123
-      Jwt__SecretKey: "sua-chave-secreta-super-segura-aqui-com-pelo-menos-32-caracteres"
-      Jwt__Issuer: "SAMGestor"
-      Jwt__Audience: "SAMGestor.WebApp"
-      Jwt__ExpirationMinutes: 60
-    ports:
-      - "5000:5000"
-    networks:
-      - samgestor
-    depends_on:
-      db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    volumes:
-      - ./uploads:/app/uploads
-
-  # ========== MICROSERVIÇO: NOTIFICATION ==========
-
-  notificationapi:
-    build:
-      context: .
-      dockerfile: services/notification/src/SAMGestor.Notification.API/Dockerfile
-    container_name: samgestor-notification-api
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5001
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=samgestor;Username=samgestor;Password=samgestor123;Search Path=notification;Include Error Detail=true"
-      RabbitMQ__Host: rabbitmq
-      RabbitMQ__Port: 5672
-      RabbitMQ__Username: samgestor
-      RabbitMQ__Password: samgestor123
-      Smtp__Host: mailhog
-      Smtp__Port: 1025
-      Smtp__EnableSsl: false
-      Smtp__FromAddress: "no-reply@samgestor.local"
-      Smtp__FromName: "SAMGestor"
-    ports:
-      - "5001:5001"
-    networks:
-      - samgestor
-    depends_on:
-      db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      mailhog:
-        condition: service_started
-
-  # ========== MICROSERVIÇO: PAYMENT ==========
-
-  paymentapi:
-    build:
-      context: .
-      dockerfile: services/payment/src/SAMGestor.Payment.API/Dockerfile
-    container_name: samgestor-payment-api
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5002
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=samgestor;Username=samgestor;Password=samgestor123;Search Path=payment;Include Error Detail=true"
-      RabbitMQ__Host: rabbitmq
-      RabbitMQ__Port: 5672
-      RabbitMQ__Username: samgestor
-      RabbitMQ__Password: samgestor123
-      FakePayment__BaseUrl: "http://localhost:5002"
-    ports:
-      - "5002:5002"
-    networks:
-      - samgestor
-    depends_on:
-      db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-# ========== VOLUMES PERSISTENTES ==========
-
-volumes:
-  postgres_data:
-    driver: local
-  pgadmin_data:
-    driver: local
-  rabbitmq_data:
-    driver: local
-
-# ========== REDE ==========
-
-networks:
-  samgestor:
-    driver: bridge
-```
+Cada serviço possui:
+- Restart policy: unless-stopped
+- Variáveis de ambiente específicas
+- Dependências com healthchecks
+- Mapeamento de portas
+- Volumes quando necessário
 
 ### Schemas Separados no PostgreSQL
 
 Cada microserviço utiliza um schema dedicado no mesmo banco de dados PostgreSQL, garantindo isolamento lógico:
 
-**Script de Inicialização (init-db.sql):**
+**Script de Inicialização (init-db.sql)**:
 
-```sql
--- Cria schemas para cada microserviço
-CREATE SCHEMA IF NOT EXISTS core;
-CREATE SCHEMA IF NOT EXISTS payment;
-CREATE SCHEMA IF NOT EXISTS notification;
-
--- Define schema padrão para o usuário samgestor
-ALTER USER samgestor SET search_path TO core, payment, notification, public;
-
--- Concede permissões
-GRANT ALL PRIVILEGES ON SCHEMA core TO samgestor;
-GRANT ALL PRIVILEGES ON SCHEMA payment TO samgestor;
-GRANT ALL PRIVILEGES ON SCHEMA notification TO samgestor;
-
--- Concede permissões em todas as tabelas (presentes e futuras)
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA core TO samgestor;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA payment TO samgestor;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA notification TO samgestor;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA core GRANT ALL ON TABLES TO samgestor;
-ALTER DEFAULT PRIVILEGES IN SCHEMA payment GRANT ALL ON TABLES TO samgestor;
-ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT ALL ON TABLES TO samgestor;
-```
+O script cria três schemas (core, payment, notification) e configura:
+- Schema padrão para o usuário samgestor com search_path
+- Permissões em schemas
+- Permissões em todas as tabelas presentes e futuras
+- Privilégios padrão para novas tabelas
 
 **Vantagens desta abordagem:**
 - **Isolamento lógico**: Cada serviço tem seu próprio namespace
@@ -1740,53 +894,26 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT ALL ON TABLES TO samgestor
 
 Cada microserviço utiliza Dockerfile multi-stage para otimizar tamanho da imagem:
 
-**Exemplo: Core API Dockerfile**
+**Estrutura do Dockerfile**:
 
-```dockerfile
-# ========== STAGE 1: BUILD ==========
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+**Stage 1 - BUILD**:
+- Usa SDK .NET 8.0
+- Copia arquivos de projeto (.csproj)
+- Restaura dependências
+- Copia código-fonte
+- Compila em Release
 
-# Copia arquivos de projeto e restaura dependências
-COPY ["src/SAMGestor.API/SAMGestor.API.csproj", "src/SAMGestor.API/"]
-COPY ["src/SAMGestor.Application/SAMGestor.Application.csproj", "src/SAMGestor.Application/"]
-COPY ["src/SAMGestor.Domain/SAMGestor.Domain.csproj", "src/SAMGestor.Domain/"]
-COPY ["src/SAMGestor.Infrastructure/SAMGestor.Infrastructure.csproj", "src/SAMGestor.Infrastructure/"]
-COPY ["shared/contracts/SAMGestor.Contracts/SAMGestor.Contracts.csproj", "shared/contracts/SAMGestor.Contracts/"]
+**Stage 2 - PUBLISH**:
+- Publica a aplicação compilada
 
-RUN dotnet restore "src/SAMGestor.API/SAMGestor.API.csproj"
+**Stage 3 - RUNTIME**:
+- Usa apenas runtime .NET 8.0 (sem SDK)
+- Cria usuário não-root para segurança
+- Copia binários publicados
+- Expõe porta 5000
+- Define ponto de entrada
 
-# Copia código-fonte e compila
-COPY . .
-WORKDIR "/src/src/SAMGestor.API"
-RUN dotnet build "SAMGestor.API.csproj" -c Release -o /app/build
-
-# ========== STAGE 2: PUBLISH ==========
-FROM build AS publish
-RUN dotnet publish "SAMGestor.API.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-# ========== STAGE 3: RUNTIME ==========
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
-WORKDIR /app
-
-# Cria usuário não-root para segurança
-RUN addgroup --system --gid 1001 appuser && \
-    adduser --system --uid 1001 --ingroup appuser appuser
-
-# Copia binários publicados
-COPY --from=publish /app/publish .
-
-# Define usuário
-USER appuser
-
-# Expõe porta
-EXPOSE 5000
-
-# Ponto de entrada
-ENTRYPOINT ["dotnet", "SAMGestor.API.dll"]
-```
-
-**Benefícios do Multi-Stage:**
+**Benefícios do Multi-Stage**:
 - **Imagem final pequena**: Apenas runtime + binários (sem SDK)
 - **Segurança**: Usuário não-root
 - **Cache de layers**: Restauração de pacotes é cacheada
@@ -1796,28 +923,15 @@ ENTRYPOINT ["dotnet", "SAMGestor.API.dll"]
 
 #### Desenvolvimento Local
 
-```bash
-# Inicia todos os serviços
-docker-compose up -d
+Comandos principais para gerenciar containers:
 
-# Visualiza logs
-docker-compose logs -f
-
-# Logs de um serviço específico
-docker-compose logs -f coreapi
-
-# Para todos os serviços
-docker-compose down
-
-# Para e remove volumes (limpa banco de dados)
-docker-compose down -v
-
-# Rebuild de imagens
-docker-compose up -d --build
-
-# Executa migrations manualmente
-docker-compose exec coreapi dotnet ef database update
-```
+- `docker-compose up -d`: Inicia todos os serviços em background
+- `docker-compose logs -f`: Visualiza logs em tempo real
+- `docker-compose logs -f coreapi`: Logs de um serviço específico
+- `docker-compose down`: Para todos os serviços
+- `docker-compose down -v`: Para e remove volumes (limpa banco de dados)
+- `docker-compose up -d --build`: Rebuild de imagens
+- `docker-compose exec coreapi dotnet ef database update`: Executa migrations manualmente
 
 #### Acesso aos Serviços
 
@@ -1838,30 +952,24 @@ Após `docker-compose up -d`, os serviços estarão disponíveis em:
 
 ### Migrations e Inicialização do Banco
 
-As migrations do Entity Framework Core são executadas automaticamente na inicialização de cada serviço:
+As migrations do Entity Framework Core são executadas automaticamente na inicialização de cada serviço em desenvolvimento.
 
-**Program.cs:**
+**Aplicação automática**: No Program.cs, em desenvolvimento, o código obtém o DbContext e executa `MigrateAsync()` automaticamente.
 
-```csharp
-// Aplica migrations automaticamente em desenvolvimento
-if (app.Environment.IsDevelopment())
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<SAMContext>();
-    await db.Database.MigrateAsync();
-}
+**Criação de nova migration**:
+
+Para Core:
+```
+dotnet ef migrations add NomeDaMigration --project src/SAMGestor.Infrastructure --startup-project src/SAMGestor.API
 ```
 
-**Criação de nova migration:**
-
-```bash
-# Core
-dotnet ef migrations add NomeDaMigration --project src/SAMGestor.Infrastructure --startup-project src/SAMGestor.API
-
-# Payment
+Para Payment:
+```
 dotnet ef migrations add NomeDaMigration --project services/payment/src/SAMGestor.Payment.Infrastructure --startup-project services/payment/src/SAMGestor.Payment.API
+```
 
-# Notification
+Para Notification:
+```
 dotnet ef migrations add NomeDaMigration --project services/notification/src/SAMGestor.Notification.Infrastructure --startup-project services/notification/src/SAMGestor.Notification.API
 ```
 
@@ -1869,49 +977,26 @@ dotnet ef migrations add NomeDaMigration --project services/notification/src/SAM
 
 #### Health Checks
 
-Todos os serviços expõem endpoints de health check:
+Todos os serviços expõem endpoints de health check em `/health`.
 
-```csharp
-builder.Services.AddHealthChecks()
-    .AddNpgSql(connectionString, name: "database")
-    .AddRabbitMQ(rabbitConnectionString, name: "rabbitmq");
+**Configuração**: Registra health checks para PostgreSQL e RabbitMQ.
 
-app.MapHealthChecks("/health");
+**Uso**:
 ```
-
-**Uso:**
-```bash
 curl http://localhost:5000/health
-# Resposta: Healthy
 ```
+
+Resposta: Healthy
 
 #### Logs Estruturados
 
-O sistema utiliza logging estruturado com Serilog (configuração futura):
+O sistema utiliza logging estruturado com Serilog (configuração futura).
 
-```json
-{
-  "Serilog": {
-    "MinimumLevel": {
-      "Default": "Information",
-      "Override": {
-        "Microsoft": "Warning",
-        "System": "Warning"
-      }
-    },
-    "WriteTo": [
-      { "Name": "Console" },
-      {
-        "Name": "File",
-        "Args": {
-          "path": "logs/samgestor-.log",
-          "rollingInterval": "Day"
-        }
-      }
-    ]
-  }
-}
-```
+**Configuração esperada**:
+- MinimumLevel padrão: Information
+- Overrides: Microsoft e System em Warning
+- WriteTo: Console e File (com rolling diário)
+- Arquivo de log: logs/samgestor-.log
 
 ### Estratégia de Deploy em Produção
 
@@ -1926,40 +1011,16 @@ Para deploy em produção, recomenda-se:
 7. **Monitoramento**: Prometheus + Grafana para métricas, ELK Stack para logs
 8. **CI/CD**: GitHub Actions ou Azure DevOps para build e deploy automatizado
 
-**Exemplo de pipeline CI/CD (GitHub Actions):**
+**Pipeline CI/CD (GitHub Actions)**:
 
-```yaml
-name: Deploy to Production
+O pipeline é acionado em push para a branch main e executa:
 
-on:
-  push:
-    branches: [main]
+1. **Checkout**: Obtém o código do repositório
+2. **Build Docker images**: Constrói imagens para Core, Payment e Notification
+3. **Push to registry**: Faz login no Docker Registry e envia as imagens
+4. **Deploy to Kubernetes**: Atualiza deployments no Kubernetes com as novas imagens
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build Docker images
-        run: |
-          docker build -t samgestor/core:${{ github.sha }} -f src/SAMGestor.API/Dockerfile .
-          docker build -t samgestor/payment:${{ github.sha }} -f services/payment/src/SAMGestor.Payment.API/Dockerfile .
-          docker build -t samgestor/notification:${{ github.sha }} -f services/notification/src/SAMGestor.Notification.API/Dockerfile .
-
-      - name: Push to registry
-        run: |
-          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-          docker push samgestor/core:${{ github.sha }}
-          docker push samgestor/payment:${{ github.sha }}
-          docker push samgestor/notification:${{ github.sha }}
-
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl set image deployment/core-api core-api=samgestor/core:${{ github.sha }}
-          kubectl set image deployment/payment-api payment-api=samgestor/payment:${{ github.sha }}
-          kubectl set image deployment/notification-api notification-api=samgestor/notification:${{ github.sha }}
-```
+Usa secrets para credenciais do Docker Registry e configuração do Kubernetes.
 
 ---
 
