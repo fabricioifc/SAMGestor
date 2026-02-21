@@ -1,8 +1,8 @@
 # Arquitetura do Sistema SAMGestor
 
-## 4.1 Proposta Inicial: Arquitetura Monolítica
+## Proposta Inicial: Arquitetura Monolítica
 
-Na proposta inicial do TCC 1, o sistema SAMGestor foi concebido como uma **arquitetura monolítica** baseada nos princípios de **Clean Architecture**. A aplicação seria estruturada em camadas bem definidas, com separação clara de responsabilidades:
+Na proposta inicial o sistema SAMGestor foi concebido como uma **arquitetura monolítica** baseada nos princípios de **Clean Architecture**. A aplicação seria estruturada em camadas bem definidas, com separação clara de responsabilidades:
 
 - **Camada de Apresentação (API)**: Controllers REST responsáveis por receber requisições HTTP
 - **Camada de Aplicação**: Casos de uso implementados com padrão CQRS usando MediatR
@@ -38,13 +38,11 @@ graph TB
     style DB fill:#f0f0f0
 ```
 
-## 4.2 Migração para Microserviços
+## Migração para Microserviços
 
-### 4.2.1 Motivação e Justificativa Técnica
+Durante o desenvolvimento identifiquei a necessidade de migrar para uma **arquitetura de microserviços** pelas seguintes razões:
 
-Durante o desenvolvimento do TCC 2, foi identificada a necessidade de migrar para uma **arquitetura de microserviços** pelas seguintes razões:
-
-**Justificativas Técnicas:**
+**Técnicas:**
 
 1. **Separação de Responsabilidades**: Os módulos de pagamento e notificação possuem ciclos de vida e requisitos distintos do core de negócio
 2. **Escalabilidade Independente**: O serviço de notificações pode precisar escalar horizontalmente de forma independente durante períodos de alta demanda
@@ -52,14 +50,14 @@ Durante o desenvolvimento do TCC 2, foi identificada a necessidade de migrar par
 4. **Tecnologia Específica**: Cada serviço pode utilizar bibliotecas e otimizações específicas para seu domínio
 5. **Desenvolvimento Paralelo**: Equipes podem trabalhar de forma independente em cada serviço
 
-**Justificativas de Negócio:**
+**Negócio:**
 
 1. **Conformidade e Auditoria**: Isolamento do serviço de pagamentos facilita auditorias e conformidade com regulamentações (PCI-DSS)
 2. **Manutenibilidade**: Mudanças em regras de notificação não afetam o core de negócio
 3. **Testabilidade**: Cada serviço pode ser testado isoladamente
 4. **Deploy Independente**: Atualizações em um serviço não requerem deploy de todo o sistema
 
-### 4.2.2 Análise Comparativa
+### Análise Comparativa
 
 | Aspecto | Arquitetura Monolítica | Arquitetura de Microserviços |
 |---------|------------------------|------------------------------|
@@ -72,9 +70,7 @@ Durante o desenvolvimento do TCC 2, foi identificada a necessidade de migrar par
 | **Manutenção** | Mudanças podem ter efeitos colaterais amplos | Mudanças isoladas por bounded context |
 | **Independência de equipes** | Equipes trabalham no mesmo código | Equipes podem trabalhar independentemente |
 
-## 4.3 Arquitetura de Microserviços Implementada
-
-### 4.3.1 Visão Geral
+## Arquitetura de Microserviços Implementada
 
 O sistema SAMGestor foi decomposto em **três microserviços principais**, cada um com seu próprio banco de dados e responsabilidades bem definidas:
 
@@ -111,7 +107,7 @@ graph LR
     style MQ fill:#fff4e1
 ```
 
-### 4.3.2 Serviço Core (SAM.Core)
+### Serviço Core (SAM.Core)
 
 **Responsabilidades:**
 - Gerenciamento de retiros espirituais
@@ -146,7 +142,7 @@ O serviço Core representa o **contexto central de negócio** do sistema, respon
 - Schema: `core`
 - Tabelas principais: `retreats`, `registrations`, `families`, `family_members`, `teams`, `team_members`, `service_spaces`, `service_registrations`, `service_assignments`, `tents`, `tent_assignments`, `users`, `waiting_list_items`, `outbox_messages`
 
-### 4.3.3 Serviço de Pagamentos (SAM.Payment)
+### Serviço de Pagamentos (SAM.Payment)
 
 **Responsabilidades:**
 - Criação de links de pagamento
@@ -161,9 +157,9 @@ O serviço Payment é responsável por todo o **ciclo de vida financeiro** das i
 **Fluxo de Processamento de Pagamentos:**
 1. Recebe evento `PaymentRequestedV1` do serviço Notification
 2. Cria registro de pagamento no banco local
-3. Gera link de pagamento (fake ou integração real)
+3. Gera link de pagamento 
 4. Publica evento `PaymentLinkCreatedV1` via Outbox
-5. Recebe confirmação de pagamento (webhook ou simulação)
+5. Recebe confirmação de pagamento (webhook)
 6. Atualiza status do pagamento para `Paid`
 7. Publica evento `PaymentConfirmedV1` via Outbox
 
@@ -174,7 +170,7 @@ O serviço Payment é responsável por todo o **ciclo de vida financeiro** das i
 - Schema: `payment`
 - Tabelas principais: `payments`, `outbox_messages`
 
-### 4.3.4 Serviço de Notificações (SAM.Notification)
+### Serviço de Notificações (SAM.Notification)
 
 **Responsabilidades:**
 - Recepção de eventos de seleção de participantes
@@ -189,7 +185,7 @@ O serviço Notification é responsável por toda **comunicação externa** com p
 
 **Canais de Notificação Suportados:**
 - **Email**: Envio via SMTP para notificações transacionais
-- **WhatsApp**: Criação de grupos familiares (integração futura)
+- **WhatsApp**: Criação de grupos familiares 
 
 **Principais Entidades:**
 - `NotificationMessage`: Mensagem de notificação com canal, destinatário e conteúdo
@@ -200,9 +196,9 @@ O serviço Notification é responsável por toda **comunicação externa** com p
 - Schema: `notification`
 - Tabelas principais: `notification_messages`, `notification_dispatch_logs`, `selected_registrations`
 
-## 4.4 Comunicação Entre Serviços
+## Comunicação Entre Serviços
 
-### 4.4.1 Event-Driven Architecture
+### Event-Driven Architecture
 
 O sistema SAMGestor utiliza uma **arquitetura orientada a eventos (Event-Driven Architecture)** para comunicação entre microserviços. Neste modelo:
 
@@ -217,7 +213,7 @@ O sistema SAMGestor utiliza uma **arquitetura orientada a eventos (Event-Driven 
 - **Event Sourcing Parcial**: Eventos são armazenados antes da publicação (Outbox Pattern)
 - **Idempotência**: Consumidores garantem processamento idempotente de eventos
 
-### 4.4.2 RabbitMQ como Message Broker
+### RabbitMQ como Message Broker
 
 O **RabbitMQ** foi escolhido como message broker pela sua robustez, suporte a padrões avançados de roteamento e facilidade de configuração.
 
@@ -304,7 +300,7 @@ graph TB
 **Configurações de Retry e Dead Letter:**
 Atualmente o sistema não implementa Dead Letter Queues (DLQ). Mensagens com falha permanecem na tabela Outbox com `ProcessedAt = null` e são reprocessadas no próximo ciclo do OutboxDispatcher.
 
-### 4.4.3 Outbox Pattern Implementado
+### Outbox Pattern Implementado
 
 O **Outbox Pattern** é um padrão de design que garante a **consistência eventual** entre o banco de dados local e o message broker, evitando o problema de "dual write" (escrever em dois sistemas transacionais simultaneamente).
 
@@ -349,12 +345,6 @@ sequenceDiagram
 5. **Publicação no Broker**: O dispatcher publica as mensagens no RabbitMQ
 6. **Marcação de Processamento**: Após publicação bem-sucedida, a mensagem é marcada com `ProcessedAt`
 
-**Serviços que Implementam Outbox:**
-
-- ✅ **SAM.Core**: Implementa Outbox completo com suporte a LISTEN/NOTIFY do PostgreSQL
-- ✅ **SAM.Payment**: Implementa Outbox com polling simples
-- ❌ **SAM.Notification**: Publica eventos diretamente no RabbitMQ (sem Outbox)
-
 **Estrutura da Tabela OutboxMessage:**
 
 | Coluna | Tipo | Descrição |
@@ -396,26 +386,6 @@ sequenceDiagram
 4. **Correlation IDs**: Uso de `TraceId` para rastreamento e detecção de duplicatas
 
 
-
-### 4.4.4 Eventos de Domínio
-
-A tabela abaixo lista todos os eventos de domínio utilizados no sistema SAMGestor:
-
-| Nome do Evento | Serviço que Publica | Serviço(s) que Consomem | Principais Campos do Payload |
-|----------------|---------------------|-------------------------|------------------------------|
-| `selection.participant.selected.v1` | **Core** | **Notification** | `RegistrationId`, `RetreatId`, `Amount`, `Currency`, `Name`, `Email`, `Phone` |
-| `selection.participant.selected.v2` | **Core** | *(reservado para uso futuro)* | *(não implementado)* |
-| `serving.participant.selected.v1` | **Core** | **Notification** | `RegistrationId`, `RetreatId`, `Amount`, `Currency`, `Name`, `Email`, `Phone` |
-| `payment.requested.v1` | **Notification** | **Payment** | `RegistrationId`, `RetreatId`, `Amount`, `Currency`, `Name`, `Email`, `Phone` |
-| `payment.link.created.v1` | **Payment** | **Notification** | `PaymentId`, `RegistrationId`, `RetreatId`, `Amount`, `Currency`, `LinkUrl`, `ExpiresAt` |
-| `payment.confirmed.v1` | **Payment** | **Core**, **Notification** | `PaymentId`, `RegistrationId`, `RetreatId`, `Amount`, `Method`, `PaidAt` |
-| `family.group.create.requested.v1` | **Core** | **Notification** | `RetreatId`, `FamilyId`, `ForceRecreate`, `Members[]` (array de `RegistrationId`, `Name`, `Email`, `PhoneE164`) |
-| `family.group.created.v1` | **Notification** | **Core** | `RetreatId`, `FamilyId`, `Channel`, `Link`, `ExternalId`, `CreatedAt` |
-| `family.group.create.failed.v1` | **Notification** | **Core** | `RetreatId`, `FamilyId`, `Channel`, `Reason`, `AffectedRegistrationIds[]` |
-| `family.group.notify.requested.v1` | **Core** | **Notification** | `RetreatId`, `FamilyId`, `GroupLink`, `Members[]` (array de `RegistrationId`, `Name`, `Email`, `PhoneE164`) |
-| `notification.email.sent.v1` | **Notification** | *(nenhum - auditoria)* | `NotificationId`, `RegistrationId`, `Email`, `SentAt` |
-| `notification.email.failed.v1` | **Notification** | *(nenhum - auditoria)* | `NotificationId`, `RegistrationId`, `Email`, `Error`, `FailedAt` |
-
 **Fluxos de Eventos Principais:**
 
 **Fluxo 1: Seleção de Participante para Retiro**
@@ -443,7 +413,7 @@ OU
 Notification → family.group.create.failed.v1 → Core (marca como falha)
 ```
 
-## 4.5 Estratégia de Dados (Database per Service)
+## Estratégia de Dados (Database per Service)
 
 O sistema SAMGestor implementa o padrão **Database per Service**, onde cada microserviço possui seu próprio banco de dados isolado. Esta abordagem garante:
 
@@ -486,82 +456,6 @@ graph TB
     style NOT_SCHEMA fill:#e1ffe1
 ```
 
-### Core Database (Schema: `core`)
-
-**Entidades/Tabelas Principais:**
-
-**Gestão de Retiros:**
-- `retreats`: Retiros espirituais com datas, capacidade, preços e configurações
-- `region_configs`: Configurações regionais (estados, cidades permitidas)
-
-**Inscrições e Participantes:**
-- `registrations`: Inscrições de participantes em retiros
-- `waiting_list_items`: Lista de espera quando retiro está lotado
-- `blocked_cpfs`: CPFs bloqueados do sistema
-
-**Famílias:**
-- `families`: Grupos familiares com capacidade e link do grupo WhatsApp
-- `family_members`: Vínculo entre inscrições e famílias (com posição)
-
-**Equipes de Serviço:**
-- `teams`: Equipes de trabalho no retiro
-- `team_members`: Membros das equipes
-
-**Espaços de Serviço:**
-- `service_spaces`: Espaços de serviço disponíveis (cozinha, limpeza, etc.)
-- `service_registrations`: Inscrições para serviço
-- `service_assignments`: Alocação de participantes em espaços de serviço
-- `service_registration_payments`: Vínculo entre inscrição de serviço e pagamento
-
-**Barracas:**
-- `tents`: Barracas disponíveis no retiro
-- `tent_assignments`: Alocação de participantes em barracas
-
-**Autenticação:**
-- `users`: Usuários do sistema (administradores)
-- `refresh_tokens`: Tokens de refresh para autenticação
-- `email_confirmation_tokens`: Tokens para confirmação de email
-- `password_reset_tokens`: Tokens para reset de senha
-
-**Auditoria e Relatórios:**
-- `change_logs`: Log de alterações no sistema
-- `reports`: Catálogo de relatórios disponíveis
-- `report_instances`: Instâncias de relatórios gerados
-
-**Mensageria:**
-- `outbox_messages`: Eventos pendentes para publicação no RabbitMQ
-- `message_templates`: Templates de mensagens (legado)
-- `messages_sent`: Mensagens enviadas (legado)
-
-### Payment Database (Schema: `payment`)
-
-**Entidades/Tabelas Principais:**
-
-- **`payments`**: Tabela central do serviço de pagamentos
-  - Campos: `Id`, `RegistrationId`, `RetreatId`, `Amount`, `Currency`, `Provider`, `ProviderPreferenceId`, `ProviderPaymentId`, `LinkUrl`, `Status`, `CreatedAt`, `UpdatedAt`, `PaidAt`, `ExpiresAt`
-  - Status possíveis: `Pending`, `LinkCreated`, `Paid`, `Failed`, `Expired`
-  - Índice único em `RegistrationId` para garantir idempotência (1 pagamento por inscrição)
-
-- **`outbox_messages`**: Eventos pendentes para publicação
-  - Mesma estrutura do Core, mas com `Source = "sam.payment"`
-
-### Notification Database (Schema: `notification`)
-
-**Entidades/Tabelas Principais:**
-
-- **`notification_messages`**: Mensagens de notificação a serem enviadas
-  - Campos: `Id`, `Channel`, `Status`, `RecipientName`, `RecipientEmail`, `RecipientPhone`, `TemplateKey`, `Subject`, `Body`, `RegistrationId`, `RetreatId`, `ExternalCorrelationId`, `Attempts`, `LastError`, `CreatedAt`, `SentAt`
-  - Canais: `Email`, `SMS`, `WhatsApp`
-  - Status: `Pending`, `Sent`, `Failed`
-
-- **`notification_dispatch_logs`**: Log de tentativas de envio
-  - Campos: `Id`, `NotificationMessageId`, `Status`, `Error`, `CreatedAt`
-
-- **`selected_registrations`**: Cache local de participantes selecionados
-  - Campos: `RegistrationId` (PK), `RetreatId`, `Name`, `Email`, `Phone`, `Amount`, `Currency`, `Kind`, `CreatedAt`, `UpdatedAt`
-  - `Kind`: `Selection` (retiro) ou `Serving` (serviço)
-  - Utilizado para idempotência e para evitar chamadas ao Core
-
 ### Como é Mantida a Consistência Entre os Bancos
 
 A consistência entre os bancos de dados é mantida através de **Consistência Eventual** via eventos:
@@ -593,26 +487,13 @@ A consistência entre os bancos de dados é mantida através de **Consistência 
 
 ---
 
-## Conclusão
 
-A arquitetura de microserviços implementada no SAMGestor demonstra a evolução de um sistema monolítico para uma solução distribuída, escalável e resiliente. A utilização de padrões como **Outbox Pattern**, **Event-Driven Architecture** e **Database per Service** garante:
-
-- ✅ **Desacoplamento entre serviços**: Cada serviço opera de forma independente
-- ✅ **Escalabilidade independente**: Serviços podem escalar conforme demanda específica
-- ✅ **Resiliência a falhas**: Falhas isoladas não comprometem todo o sistema
-- ✅ **Consistência eventual garantida**: Eventos asseguram sincronização entre serviços
-- ✅ **Rastreabilidade completa**: Todos os eventos possuem `TraceId` para auditoria
-- ✅ **Facilidade de manutenção**: Mudanças isoladas por bounded context
-- ✅ **Testabilidade**: Cada serviço pode ser testado independentemente
-
-Esta arquitetura serve como base sólida para futuras expansões do sistema, como:
+## Esta arquitetura serve como base sólida para futuras expansões do sistema, como:
 
 - Adição de novos canais de notificação (SMS, Push Notifications)
-- Integração com múltiplos gateways de pagamento (Mercado Pago, Stripe, PayPal)
+- Integração com múltiplos gateways de pagamento (Stripe, PayPal)
 - Implementação de analytics e relatórios avançados
 - Criação de serviço de auditoria centralizado
 - Implementação de API Gateway para roteamento unificado
 - Adição de circuit breakers e políticas de retry avançadas
-
-A documentação apresentada neste documento fornece uma visão completa da arquitetura implementada, servindo como referência técnica para o desenvolvimento contínuo do sistema SAMGestor.
 
