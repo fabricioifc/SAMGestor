@@ -1,0 +1,149 @@
+name: CI — Build & Tests
+
+on:
+  push:
+    branches: ["**"]       
+  pull_request:
+    branches: [main, develop]
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  # ─────────────────────────────────────────
+  # JOB 1 — Build da solution completa
+  # ─────────────────────────────────────────
+  build:
+    name: Build Solution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependências
+        run: dotnet restore SAMGestor.sln
+
+      - name: Build (sem warnings como erro por ora)
+        run: dotnet build SAMGestor.sln --no-restore --configuration Release
+
+  # ─────────────────────────────────────────
+  # JOB 2 — Testes unitários
+  # ─────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: build  
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependências
+        run: dotnet restore SAMGestor.sln
+
+      - name: Rodar testes unitários
+        run: |
+          dotnet test SAMGestor.sln \
+            --no-restore \
+            --configuration Release \
+            --filter "Category=Unit" \
+            --logger "trx;LogFileName=unit-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults/Unit
+      - name: Publicar relatório de testes
+        uses: dorny/test-reporter@v1
+        if: always()   
+        with:
+          name: Unit Test Results
+          path: ./TestResults/Unit/*.trx
+          reporter: dotnet-trx
+
+      # Upload do coverage para ver no PR
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-unit
+          path: ./TestResults/Unit/**/coverage.cobertura.xml
+
+  # ─────────────────────────────────────────
+  # JOB 3 — Testes de integração 
+  # TestContainers 
+  # ─────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests (TestContainers)
+    runs-on: ubuntu-latest
+    needs: build   
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Verificar Docker disponível
+        run: docker --version
+
+      - name: Restore dependências
+        run: dotnet restore SAMGestor.sln
+
+      - name: Rodar testes de integração
+        run: |
+          dotnet test SAMGestor.sln \
+            --no-restore \
+            --configuration Release \
+            --filter "Category=Integration" \
+            --logger "trx;LogFileName=integration-results.trx" \
+            --results-directory ./TestResults/Integration \
+            --timeout 120000
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
+      - name: Publicar relatório de integração
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Integration Test Results
+          path: ./TestResults/Integration/*.trx
+          reporter: dotnet-trx
