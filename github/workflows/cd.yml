@@ -1,0 +1,104 @@
+name: CD — Build & Push Docker Images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.lucas-magalhaes1 }}
+
+jobs:
+  # ─────────────────────────────────────────
+  # JOB ÚNICO com Matrix Strategy
+  # Roda em paralelo para os 3 serviços
+  # ─────────────────────────────────────────
+  build-and-push:
+    name: Docker — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false   
+      matrix:
+        include:
+          - service: samgestor-core
+            dockerfile: src/SAMGestor.API/Dockerfile
+            context: .
+            image: samgestor-core
+
+          - service: samgestor-notification
+            dockerfile: services/notification/src/SAMGestor.Notification.API/Dockerfile
+            context: .
+            image: samgestor-notification
+
+          - service: samgestor-payment
+            dockerfile: services/payment/src/SAMGestor.Payment.API/Dockerfile
+            context: .
+            image: samgestor-payment
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login no GitHub Container Registry usando token automático
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}  
+
+
+      - name: Extrair metadados da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            # tag com o SHA do commit: samgestor-core:abc1234
+            type=sha,prefix=,format=short
+            # tag latest sempre que for main
+            type=raw,value=latest,enable={{is_default_branch}}
+            # tag com a data: samgestor-core:2026-03-30
+            type=raw,value={{date 'YYYY-MM-DD'}}
+
+      # Build + Push com cache do GitHub Actions 
+      - name: Build e Push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+  
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ─────────────────────────────────────────
+  # JOB FINAL — Resumo do deploy
+  # ─────────────────────────────────────────
+  summary:
+    name: Deploy Summary
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: always()
+
+    steps:
+      - name: Resumo das imagens publicadas
+        run: |
+          echo "## Imagens publicadas no GHCR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Serviço | Registry | Tag |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Core | ghcr.io/${{ github.repository_owner }}/samgestor-core | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Notification | ghcr.io/${{ github.repository_owner }}/samgestor-notification | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Payment | ghcr.io/${{ github.repository_owner }}/samgestor-payment | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
