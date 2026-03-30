@@ -1,0 +1,25 @@
+# observability/prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: "samgestor"
+    environment: "local"
+
+scrape_configs:
+  - job_name: "samgestor-core"
+    static_configs:
+      - targets: ["host.docker.internal:5000"]  
+          service: "core"
+
+  - job_name: "samgestor-notification"
+    static_configs:
+      - targets: ["host.docker.internal:5001"] 
+        labels:
+          service: "notification"
+
+  - job_name: "samgestor-payment"
+    static_configs:
+      - targets: ["host.docker.internal:5002"] 
+        labels:
+          service: "payment"
