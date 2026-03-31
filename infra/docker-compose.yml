@@ -53,6 +53,20 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  redis:                                       
+    image: redis:7-alpine
+    container_name: samgestor-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   coreapi:
     build:
       context: ..
@@ -82,6 +96,8 @@ services:
       Jwt__RefreshTokenDays: ${JWT_REFRESH_DAYS}
       Jwt__AccessTokenMinutes: ${JWT_ACCESS_MINUTES}
       Jwt__RefreshTokenReusePeriodSeconds: ${JWT_REFRESH_REUSE_PERIOD_SECONDS}
+      Redis__ConnectionString: redis:6379          
+      Redis__InstanceName: "samgestor:core:"       
     ports:
       - "5000:8080"
     depends_on:
@@ -91,10 +107,11 @@ services:
         condition: service_healthy
       mailhog:
         condition: service_started
+      redis:                                        
+        condition: service_healthy
     volumes:
       - ./uploads:/app/wwwroot/uploads
-        
-        
+
   notificationapi:
     build:
       context: ..
@@ -119,7 +136,7 @@ services:
         condition: service_healthy
       mailhog:
         condition: service_started
-        
+
   paymentapi:
     build:
       context: ..
@@ -145,3 +162,4 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:   
