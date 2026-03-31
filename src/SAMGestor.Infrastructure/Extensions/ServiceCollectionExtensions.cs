@@ -46,8 +46,9 @@ public static class ServiceCollectionExtensions
         services
             .AddPersistence(configuration)
             .AddMessaging(configuration)
-            .AddStorage(configuration); 
-
+            .AddStorage(configuration)
+            .AddCache(configuration);  
+        
         return services;
     }
 
@@ -64,8 +65,6 @@ public static class ServiceCollectionExtensions
             )
         );
         
-        services.AddDistributedMemoryCache();
-        
         services.AddScoped<IRelationshipService, HeuristicRelationshipService>();
         services.AddScoped<IRetreatRepository, RetreatRepository>();
         services.AddScoped<IRegistrationRepository, RegistrationRepository>();
@@ -74,19 +73,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFamilyMemberRepository, FamilyMemberRepository>();
 
         services.AddScoped<ServiceSpacesSeeder>();
-        
+
         services.AddScoped<IReportTemplateRegistry, ReportTemplateRegistry>();
         services.AddScoped<RahamistasPerFamiliaTemplate>();
-        services.AddScoped<IReportTemplate, RahamistasPerFamiliaTemplate>(sp => 
+        services.AddScoped<IReportTemplate, RahamistasPerFamiliaTemplate>(sp =>
             sp.GetRequiredService<RahamistasPerFamiliaTemplate>());
         services.AddScoped<ContemplatedParticipantsTemplate>();
-        services.AddScoped<IReportTemplate, ContemplatedParticipantsTemplate>(sp => 
+        services.AddScoped<IReportTemplate, ContemplatedParticipantsTemplate>(sp =>
             sp.GetRequiredService<ContemplatedParticipantsTemplate>());
         services.AddScoped<ShirtsBySizeTemplate>();
-        services.AddScoped<IReportTemplate, ShirtsBySizeTemplate>(sp => 
+        services.AddScoped<IReportTemplate, ShirtsBySizeTemplate>(sp =>
             sp.GetRequiredService<ShirtsBySizeTemplate>());
         services.AddScoped<PeopleEpitaphTemplate>();
-        services.AddScoped<IReportTemplate, PeopleEpitaphTemplate>(sp => 
+        services.AddScoped<IReportTemplate, PeopleEpitaphTemplate>(sp =>
             sp.GetRequiredService<PeopleEpitaphTemplate>());
         services.AddScoped<TentsAllocationTemplate>();
         services.AddScoped<IReportTemplate, TentsAllocationTemplate>(sp => sp.GetRequiredService<TentsAllocationTemplate>());
@@ -104,7 +103,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReportTemplate, ServiceTeamsTemplate>(sp => sp.GetRequiredService<ServiceTeamsTemplate>());
         services.AddScoped<ServiceCoordinatorsTemplate>();
         services.AddScoped<IReportTemplate, ServiceCoordinatorsTemplate>(sp => sp.GetRequiredService<ServiceCoordinatorsTemplate>());
-
 
         services.AddMediatR(typeof(CreateRetreatHandler).Assembly);
         services.AddValidatorsFromAssemblyContaining<CreateRetreatValidator>();
@@ -136,8 +134,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRawSqlExecutor, RawSqlExecutor>();
         services.AddScoped<IManualPaymentProofRepository, ManualPaymentProofRepository>();
         services.AddScoped<ICustomNotificationRepository, CustomNotificationRepository>();
-        
-       
 
         services.AddHttpClient<IImageFetcher, HttpImageFetcher>(client =>
             {
@@ -146,7 +142,6 @@ public static class ServiceCollectionExtensions
 #if DEBUG
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
-                // opcional: aceita HTTPS self-signed no DEV (localhost)
                 ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
             })
 #endif
@@ -154,8 +149,6 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
-    
-    
 
     private static IServiceCollection AddMessaging(
         this IServiceCollection services,
@@ -186,7 +179,6 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    //  Storage (MVP local; pronto para trocar por S3/Azure depois) 
     private static IServiceCollection AddStorage(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -205,6 +197,30 @@ public static class ServiceCollectionExtensions
         {
             throw new NotSupportedException($"Storage provider '{provider}' não suportado no ambiente atual.");
         }
+
+        return services;
+    }
+    
+    private static IServiceCollection AddCache(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var redisConnection = configuration["Redis:ConnectionString"];
+
+        if (!string.IsNullOrWhiteSpace(redisConnection))
+        {
+            services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = redisConnection;
+                options.InstanceName = configuration["Redis:InstanceName"] ?? "samgestor:core:";
+            });
+        }
+        else
+        {
+            services.AddDistributedMemoryCache();
+        }
+
+        services.AddSingleton<ICacheService, CacheService>();
 
         return services;
     }
