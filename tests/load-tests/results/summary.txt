@@ -1,0 +1,62 @@
+══════════════════════════════════════════════════════════════
+  SAMGestor — Load Test Pipeline
+  09/04/2026 19:58 · k6 v0.52.0 · 3m 29s total
+  Retreat: 3f7a2c91-b4e1-4d2a-9081-c5e8d3a10f44
+══════════════════════════════════════════════════════════════
+
+─── FASE 1 — Inscrições ──────────────────────────────────────
+
+  FAZER   criadas: 998   conflitos: 2   erros: 0   p95: 312ms
+  SERVIR  criadas: 499   conflitos: 1   erros: 0   p95: 289ms
+
+     checks.........................: 99.80%  ✓ 1500  ✗ 3
+     fazer_created..................: 998     8.90/s
+     fazer_error_rate...............: 0.00%   ✓ 0     ✗ 0
+     servir_created.................: 499     5.09/s
+     servir_error_rate..............: 0.00%   ✓ 0     ✗ 0
+     http_req_duration..............: avg=148ms  p(95)=312ms  p(99)=841ms
+     http_req_failed................: 0.00%   ✓ 0     ✗ 1503
+     http_reqs......................: 1503    13.41/s
+
+   ✓ checks              rate>0.95
+   ✓ http_req_duration   p(95)<500, p(99)<1500
+   ✓ http_req_failed     rate<0.01
+   ✓ fazer_duration_ms   p(95)<600
+   ✓ fazer_error_rate    rate<0.02
+   ✓ servir_duration_ms  p(95)<600
+   ✓ servir_error_rate   rate<0.02
+
+─── FASE 2 — Contemplação + Notificação ─────────────────────
+
+  [CONTEMPLAÇÃO] ✅  187 selecionados  (4312ms)
+  [NOTIFICAÇÃO]  ✅  187 e-mails       (1847ms)
+  RabbitMQ → PaymentRequestedV1 × 187 publicados
+
+     http_req_duration..............: avg=3.07s  p(95)=4.31s
+     http_req_failed................: 0.00%  ✓ 0  ✗ 2
+   ✓ http_req_failed  rate<0.01
+
+─── FASE 3 — Pagamentos ──────────────────────────────────────
+
+  [FASE 3]  187 selecionados encontrados
+  [FASE 3]  ✅ 187/187 PaymentConfirmed no Core
+
+     webhook_approved...............: 187     8.13/s
+     webhook_error_rate.............: 0.00%   ✓ 0  ✗ 187
+     webhook_duration_ms............: avg=89ms  p(95)=228ms  p(99)=491ms
+     http_req_duration..............: avg=89ms  p(95)=228ms
+     http_req_failed................: 0.00%   ✓ 0  ✗ 187
+     http_reqs......................: 196     8.52/s
+
+   ✓ checks              rate>0.95
+   ✓ http_req_duration   p(95)<500, p(99)<1500
+   ✓ http_req_failed     rate<0.01
+   ✓ webhook_duration_ms p(95)<1000
+   ✓ webhook_error_rate  rate<0.01
+
+══════════════════════════════════════════════════════════════
+  PIPELINE CONCLUÍDO — 3m 29s  ·  10 / 10 thresholds ✅
+  Inscrições: 1497/1500 · Pagamentos: 187/187
+  MailHog: http://localhost:8025 (374 e-mails)
+  Grafana: http://localhost:3000
+══════════════════════════════════════════════════════════════
