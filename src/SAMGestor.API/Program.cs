@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using MediatR;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using QuestPDF.Infrastructure;
 using SAMGestor.Infrastructure.Extensions;
 using SAMGestor.API.Extensions;
@@ -8,6 +9,7 @@ using SAMGestor.API.Middlewares;
 using SAMGestor.Application.Features.Retreats.Create;
 using SAMGestor.Infrastructure.Messaging.Consumers;
 using SAMGestor.Application.Common.Auth;
+using SAMGestor.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +52,12 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<SAMContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 

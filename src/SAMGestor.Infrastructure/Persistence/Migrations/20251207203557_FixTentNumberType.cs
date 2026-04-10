@@ -13,7 +13,7 @@ namespace SAMGestor.Infrastructure.Migrations
             // Cria índice único para evitar duplicação
             migrationBuilder.Sql(@"
                 CREATE UNIQUE INDEX ix_tents_unique_number 
-                ON tents (retreat_id, number);
+                ON core.tents (retreat_id, number);
             ");
         }
 
@@ -21,7 +21,7 @@ namespace SAMGestor.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"
-                DROP INDEX IF EXISTS ix_tents_unique_number;
+                DROP INDEX IF EXISTS core.ix_tents_unique_number;
             ");
         }
     }

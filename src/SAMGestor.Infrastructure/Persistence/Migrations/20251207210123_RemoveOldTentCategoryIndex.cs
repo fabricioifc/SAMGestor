@@ -11,7 +11,7 @@ namespace SAMGestor.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"
-        DROP INDEX IF EXISTS ux_tents_retreat_category_number;
+        DROP INDEX IF EXISTS core.ux_tents_retreat_category_number;
     ");
         }
 
@@ -19,7 +19,7 @@ namespace SAMGestor.Infrastructure.Migrations
         {
             migrationBuilder.Sql(@"
         CREATE UNIQUE INDEX ux_tents_retreat_category_number 
-        ON tents (retreat_id, category, number);
+        ON core.tents (retreat_id, category, number);
     ");
         }
     }

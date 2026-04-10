@@ -58,6 +58,12 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
 app.MapGet("/health", async (NotificationDbContext db) =>
     (await db.Database.CanConnectAsync())
         ? Results.Ok(new { status = "ok", service = "notification" })

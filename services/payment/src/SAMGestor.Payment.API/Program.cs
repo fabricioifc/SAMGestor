@@ -51,6 +51,12 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<PaymentDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
 app.MapGet("/", () => Results.Redirect("/swagger"))
     .ExcludeFromDescription();
 

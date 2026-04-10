@@ -931,7 +931,9 @@ Comandos principais para gerenciar containers:
 - `docker-compose down`: Para todos os serviços
 - `docker-compose down -v`: Para e remove volumes (limpa banco de dados)
 - `docker-compose up -d --build`: Rebuild de imagens
-- `docker-compose exec coreapi dotnet ef database update`: Executa migrations manualmente
+- `dotnet ef database update --project src/SAMGestor.Infrastructure --startup-project src/SAMGestor.API`: Executa migrations manuais do Core a partir da máquina host
+- `dotnet ef database update --project services/payment/src/SAMGestor.Payment.Infrastructure --startup-project services/payment/src/SAMGestor.Payment.API`: Executa migrations manuais do Payment a partir da máquina host
+- `dotnet ef database update --project services/notification/src/SAMGestor.Notification.Infrastructure --startup-project services/notification/src/SAMGestor.Notification.API`: Executa migrations manuais do Notification a partir da máquina host
 
 #### Acesso aos Serviços
 
@@ -952,9 +954,9 @@ Após `docker-compose up -d`, os serviços estarão disponíveis em:
 
 ### Migrations e Inicialização do Banco
 
-As migrations do Entity Framework Core são executadas automaticamente na inicialização de cada serviço em desenvolvimento.
+As migrations do Entity Framework Core são executadas automaticamente na inicialização de cada serviço em desenvolvimento e no ambiente containerizado local.
 
-**Aplicação automática**: No Program.cs, em desenvolvimento, o código obtém o DbContext e executa `MigrateAsync()` automaticamente.
+**Aplicação automática**: No Program.cs, cada serviço obtém seu DbContext e executa `MigrateAsync()` automaticamente durante a inicialização.
 
 **Criação de nova migration**:
 
