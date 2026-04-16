@@ -12,6 +12,12 @@ using SAMGestor.Application.Common.Auth;
 using SAMGestor.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+const string FrontendCorsPolicyName = "FrontendCors";
+
+var allowedCorsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?? [];
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -39,12 +45,11 @@ builder.Services.AddHostedService<FamilyGroupCreatedConsumer>();
 builder.Services.AddHostedService<FamilyGroupCreateFailedConsumer>();
 builder.Services.AddHostedService<ServicePaymentConfirmedConsumer>();
 
-// CORS apenas o front local
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowLocalhost3000", policy =>
+    options.AddPolicy(FrontendCorsPolicyName, policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
+        policy.WithOrigins(allowedCorsOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -69,7 +74,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
-app.UseCors("AllowLocalhost3000");
+app.UseCors(FrontendCorsPolicyName);
 
 app.UseRateLimiter();
 app.UseAuthInfrastructure();
